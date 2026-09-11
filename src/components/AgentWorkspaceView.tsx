@@ -120,8 +120,8 @@ class ResearchJudgementAgent(QuantParentAgent):
         return self.optimize_sharpe_frontier(alpha_target=0.18)`,
     tools: ['Macro News Wire', 'Earnings Transcript Parser', 'Barra Risk API'],
     latency: '18ms',
-    x: 30,
-    y: 110,
+    x: 35,
+    y: 155,
   },
   {
     id: 'node-2',
@@ -142,8 +142,8 @@ class MarketTrendReferralSubAgent(FeatureExtractor):
         return FactorVector(lead_lag=spread_lead, momentum=capex_momentum)`,
     tools: ['L3 Market Depth Feeder', 'Real-Time Momentum Engine', 'Sentiment Classifier'],
     latency: '12ms',
-    x: 220,
-    y: 25,
+    x: 290,
+    y: 45,
   },
   {
     id: 'node-3',
@@ -163,8 +163,8 @@ class DataFactorMatrixNode(DataNode):
         return self.barra_engine.orthogonalize(cleaned_cov)`,
     tools: ['Equinix NY4 Direct Feed', 'Barra Multiple-Horizon Risk Model', 'KDB+ Tick Store'],
     latency: '4ms',
-    x: 200,
-    y: 195,
+    x: 270,
+    y: 255,
   },
   {
     id: 'node-4',
@@ -185,8 +185,8 @@ class ExecutionSubAgentGate(TerminalGate):
         raise RiskBreachException("SEC 15c3-5 Gate Triggered")`,
     tools: ['FIX 4.4 Direct DMA', 'Pre-Trade Risk Validator', 'TWAP/VWAP Algorithmic Slicer'],
     latency: '0.08ms',
-    x: 390,
-    y: 110,
+    x: 480,
+    y: 155,
   }
 ];
 
@@ -729,14 +729,31 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
     }
   }, [selectedNodeId, activeModelId]);
 
-  // Anti-hallucination auto-refresh countdown state per node
+  // Anti-hallucination auto-refresh countdown state per node matching screenshot
   const [nodeCountdowns, setNodeCountdowns] = useState<Record<string, number>>({
-    'node-1': 42,
-    'node-2': 36,
-    'node-3': 58,
-    'node-4': 24,
+    'node-1': 28,
+    'node-2': 22,
+    'node-3': 44,
+    'node-4': 10,
   });
   const [refreshingNodeId, setRefreshingNodeId] = useState<string | null>(null);
+
+  // Agent Custom Builder response & prompt state matching screenshot
+  const [builderResponse, setBuilderResponse] = useState<string>('agent response etc etc');
+  const [customPromptInput, setCustomPromptInput] = useState<string>('');
+  const [isBuildingResponse, setIsBuildingResponse] = useState<boolean>(false);
+
+  const handleSendCustomPrompt = () => {
+    if (!customPromptInput.trim()) return;
+    const prompt = customPromptInput;
+    setCustomPromptInput('');
+    setIsBuildingResponse(true);
+
+    setTimeout(() => {
+      setBuilderResponse(`Calibrated ${selectedNode?.name || 'Agent'}: Evaluated instruction "${prompt}". Output topology re-weighted (Sharpe frontier +0.14, VaR capped at <1.25%). Downstream execution gates synchronized.`);
+      setIsBuildingResponse(false);
+    }, 400);
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -744,7 +761,7 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
         const next = { ...prev };
         Object.keys(next).forEach((k) => {
           if (next[k] <= 1) {
-            next[k] = k === 'node-1' ? 45 : k === 'node-2' ? 40 : k === 'node-3' ? 60 : 30;
+            next[k] = k === 'node-1' ? 30 : k === 'node-2' ? 25 : k === 'node-3' ? 45 : 15;
           } else {
             next[k] -= 1;
           }
@@ -1137,20 +1154,53 @@ class VolSkewAgent(QuantParentAgent):
     <div className="h-full flex-1 flex flex-col min-h-0 overflow-hidden space-y-2 select-none bg-white">
       
       {/* Top Workspace Header with Multi-Model Tabs and Model Handling Section */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-border shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-1.5 border-b border-border shrink-0">
         
-        {/* Left: View Title */}
-        <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-blue-600" />
-          <span className="text-sm font-bold text-foreground font-mono tracking-tight">
-            Agent Workspace
-          </span>
-          <Badge variant="outline" className="text-[10px] font-mono bg-slate-50 text-slate-700 border-border">
-            DAG Architecture
-          </Badge>
+        {/* Left: View Title & Sandbox/Merge Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <Bot className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-bold text-foreground font-mono tracking-tight">
+              Agent Workspace
+            </span>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setRightTab('sandbox');
+              setSandboxInitialMode('compare');
+            }}
+            className="h-7 px-2.5 text-xs font-mono text-blue-700 bg-white hover:bg-blue-50/60 border-blue-300 rounded-lg gap-1 shadow-2xs"
+            title="Compare two models side-by-side in the Sandbox"
+          >
+            <ArrowLeftRight className="w-3 h-3 text-blue-600" />
+            <span>Compare in Sandbox</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setRightTab('sandbox');
+              setSandboxInitialMode('merge');
+            }}
+            className="h-7 px-2.5 text-xs font-mono text-emerald-700 bg-white hover:bg-emerald-50/60 border-emerald-300 rounded-lg gap-1 shadow-2xs"
+            title="Merge two models into a unified strategy in Sandbox"
+          >
+            <GitMerge className="w-3 h-3 text-emerald-600" />
+            <span>Merge Models</span>
+          </Button>
+
+          <div className="text-[11px] font-mono text-slate-700 font-semibold px-2 py-0.5 rounded-lg border border-border bg-slate-50 hidden sm:inline-flex">
+            Sharpe: {activeModel.expectedSharpe || 1.84} · VaR: {activeModel.varLimit || 1.25}%
+          </div>
         </div>
 
-        {/* Center: Model Tabs Section */}
+        {/* Right: Model Tabs Section */}
         <div className="flex items-center gap-1.5 overflow-x-auto max-w-xl py-0.5">
           {models.map((mod) => {
             const isActive = mod.id === activeModelId;
@@ -1206,7 +1256,7 @@ class VolSkewAgent(QuantParentAgent):
             </button>
 
             {isNewModelMenuOpen && (
-              <div className="absolute left-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-lg z-40 p-1 font-mono text-xs animate-in fade-in">
+              <div className="absolute right-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-lg z-40 p-1 font-mono text-xs animate-in fade-in">
                 <button
                   type="button"
                   onClick={() => handleCreateNewModel('blank')}
@@ -1243,43 +1293,6 @@ class VolSkewAgent(QuantParentAgent):
               </div>
             )}
           </div>
-        </div>
-
-        {/* Right: Model Handling Section (Compare & Merge in Sandbox) */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setRightTab('sandbox');
-              setSandboxInitialMode('compare');
-            }}
-            className="h-7 px-2.5 text-xs font-mono text-blue-700 bg-blue-50/50 hover:bg-blue-100/60 border-blue-200 rounded-lg gap-1 shadow-2xs"
-            title="Compare two models side-by-side in the Sandbox"
-          >
-            <ArrowLeftRight className="w-3 h-3 text-blue-600" />
-            <span>Compare in Sandbox</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setRightTab('sandbox');
-              setSandboxInitialMode('merge');
-            }}
-            className="h-7 px-2.5 text-xs font-mono text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100/60 border-emerald-200 rounded-lg gap-1 shadow-2xs"
-            title="Merge two models into a unified strategy in Sandbox"
-          >
-            <GitMerge className="w-3 h-3 text-emerald-600" />
-            <span>Merge Models</span>
-          </Button>
-
-          <Badge variant="outline" className="text-[10px] font-mono bg-white text-foreground border-border hidden sm:inline-flex">
-            Sharpe: {activeModel.expectedSharpe || 1.84} · VaR: {activeModel.varLimit || 1.25}%
-          </Badge>
         </div>
 
       </div>
@@ -1443,7 +1456,7 @@ class VolSkewAgent(QuantParentAgent):
             {viewMode === 'Node' && (
               <div className="relative w-full h-full flex-1 overflow-auto">
                 {/* SVG Connections matching sketch topology */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 min-w-[550px] min-h-[260px]">
+                <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 min-w-[680px] min-h-[350px]">
                   <defs>
                     <marker
                       id="arrow"
@@ -1454,48 +1467,66 @@ class VolSkewAgent(QuantParentAgent):
                       markerHeight="6"
                       orient="auto-start-reverse"
                     >
-                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#1e293b" opacity="0.9" />
+                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#0f172a" opacity="0.95" />
                     </marker>
                   </defs>
 
                   {/* Node 1 (Center-Left) -> Node 2 (Top-Middle) */}
                   <path
-                    d="M 175 110 C 215 90, 235 60, 275 45"
+                    d="M 185 185 C 225 150, 255 90, 290 75"
                     fill="none"
-                    stroke="#1e293b"
+                    stroke="#0f172a"
                     strokeWidth="1.75"
                     markerEnd="url(#arrow)"
                   />
 
-                  {/* Node 1 (Center-Left) -> Node 3 (Judgement node / Bottom-Middle) */}
+                  {/* Node 1 (Center-Left) -> Node 3 (Feature Store / Bottom-Middle) */}
                   <path
-                    d="M 175 145 C 210 165, 230 180, 265 190"
+                    d="M 185 210 C 220 235, 245 265, 270 280"
                     fill="none"
-                    stroke="#1e293b"
+                    stroke="#0f172a"
                     strokeWidth="1.75"
                     markerEnd="url(#arrow)"
                   />
 
-                  {/* Node 2 (Top-Middle) -> Outflow Arrow */}
+                  {/* Top-Left Inflow into Node 4 (Execution Sub-Agent) */}
                   <path
-                    d="M 395 50 C 430 70, 460 95, 490 115"
+                    d="M 410 80 C 440 100, 460 130, 480 165"
                     fill="none"
-                    stroke="#1e293b"
+                    stroke="#0f172a"
                     strokeWidth="1.75"
                     markerEnd="url(#arrow)"
                   />
 
-                  {/* Node 3 (Judgement node) -> Outflow Arrow */}
+                  {/* Node 4 Outflow to Top-Right */}
                   <path
-                    d="M 430 190 C 465 170, 495 130, 525 90"
+                    d="M 610 165 C 630 140, 645 120, 665 100"
                     fill="none"
-                    stroke="#1e293b"
+                    stroke="#0f172a"
+                    strokeWidth="1.75"
+                    markerEnd="url(#arrow)"
+                  />
+
+                  {/* Bottom-Left Inflow into Node 4 */}
+                  <path
+                    d="M 400 290 C 430 270, 455 240, 480 200"
+                    fill="none"
+                    stroke="#0f172a"
+                    strokeWidth="1.75"
+                    markerEnd="url(#arrow)"
+                  />
+
+                  {/* Node 4 Outflow to Bottom-Right */}
+                  <path
+                    d="M 610 200 C 630 230, 650 260, 675 285"
+                    fill="none"
+                    stroke="#0f172a"
                     strokeWidth="1.75"
                     markerEnd="url(#arrow)"
                   />
 
                   {/* Additional dynamic connection paths for added nodes */}
-                  {activeModel.nodes.length > 3 && activeModel.nodes.slice(3).map((n, i) => (
+                  {activeModel.nodes.length > 4 && activeModel.nodes.slice(4).map((n) => (
                     <path
                       key={n.id}
                       d={`M ${n.x + 60} ${n.y + 40} C ${n.x + 90} ${n.y + 70}, 380 140, 470 120`}
@@ -1516,8 +1547,8 @@ class VolSkewAgent(QuantParentAgent):
                   const isTool = node.type === 'tool';
                   
                   // Coordinate fallback
-                  const posX = node.x ?? (index === 0 ? 30 : index === 1 ? 270 : index === 2 ? 255 : 420);
-                  const posY = node.y ?? (index === 0 ? 50 : index === 1 ? 10 : index === 2 ? 150 : 25 + (index * 30));
+                  const posX = node.x ?? (index === 0 ? 35 : index === 1 ? 290 : index === 2 ? 270 : 480);
+                  const posY = node.y ?? (index === 0 ? 155 : index === 1 ? 45 : index === 2 ? 255 : 155);
 
                   return (
                     <div
@@ -1527,18 +1558,18 @@ class VolSkewAgent(QuantParentAgent):
                         left: `${posX}px`,
                         top: `${posY}px`,
                       }}
-                      className={`absolute min-w-[135px] max-w-[165px] p-2.5 rounded-2xl border-2 transition-all cursor-pointer z-10 flex flex-col justify-between shadow-2xs ${
+                      className={`absolute min-w-[135px] max-w-[165px] p-2.5 rounded-2xl border transition-all cursor-pointer z-10 flex flex-col justify-between shadow-2xs ${
                         isSelected
                           ? isParent
-                            ? 'bg-[#eae4ff] border-purple-500 ring-2 ring-purple-400/30'
-                            : 'bg-white border-blue-500 ring-2 ring-blue-400/30'
+                            ? 'bg-[#eae4ff] border-purple-500 ring-2 ring-purple-400/40'
+                            : 'bg-white border-blue-500 ring-2 ring-blue-400/40'
                           : isParent
-                          ? 'bg-[#eae4ff]/80 hover:bg-[#eae4ff] border-purple-200'
+                          ? 'bg-[#eae4ff] hover:bg-[#eae4ff]/90 border-purple-300'
                           : isData
-                          ? 'bg-[#f0fdf4] hover:bg-[#dcfce7] border-emerald-200'
+                          ? 'bg-white hover:bg-slate-50 border-slate-300'
                           : isTool
-                          ? 'bg-[#f8fafc] hover:bg-slate-100 border-slate-300'
-                          : 'bg-white hover:bg-slate-50 border-border'
+                          ? 'bg-white hover:bg-slate-50 border-slate-300'
+                          : 'bg-white hover:bg-slate-50 border-slate-300'
                       }`}
                     >
                       <div className="space-y-1">
@@ -1561,7 +1592,7 @@ class VolSkewAgent(QuantParentAgent):
                             className="flex items-center gap-0.5 px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8px] font-mono font-bold hover:bg-slate-200"
                           >
                             <RotateCw className={`w-2.5 h-2.5 ${refreshingNodeId === node.id ? 'animate-spin text-blue-600' : ''}`} />
-                            <span>{nodeCountdowns[node.id] || 40}s</span>
+                            <span>{nodeCountdowns[node.id] || 28}s</span>
                           </button>
                         </div>
                         <span className="text-[10.5px] font-bold text-slate-900 font-mono leading-tight block truncate">
@@ -1578,8 +1609,8 @@ class VolSkewAgent(QuantParentAgent):
                   );
                 })}
 
-                {/* AI Suggestion with Complete Bullet Reasoning Box (Lower-Left of Canvas, matching sketch) */}
-                <div className="absolute left-3 bottom-3 w-[210px] sm:w-[230px] p-2.5 rounded-2xl border border-emerald-300 bg-[#eef8f2] shadow-2xs z-20 space-y-1.5 animate-in fade-in">
+                {/* AI Suggestion with Complete Bullet Reasoning Box (Lower-Right of Canvas, matching screenshot) */}
+                <div className="absolute right-4 bottom-4 w-[220px] sm:w-[245px] p-2.5 rounded-2xl border border-emerald-300 bg-[#eef8f2] shadow-2xs z-20 space-y-1.5 animate-in fade-in">
                   <div className="flex items-center gap-1.5 text-emerald-950 font-mono text-[10px] font-bold border-b border-emerald-200/80 pb-1">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                     <span>AI suggestion with complete bullet reasoning</span>
@@ -2087,41 +2118,43 @@ class VolSkewAgent(QuantParentAgent):
                     </button>
                   </div>
 
-                  {/* Custom Builder Cards (stacked cards on left + card below as in sketch) */}
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="p-2.5 rounded-xl border border-border bg-white shadow-2xs space-y-1">
-                        <span className="text-[10px] font-bold font-mono text-slate-900 block">Signal Grounding</span>
-                        <span className="text-[9px] font-mono text-emerald-700 font-semibold block">99.8% Grounded</span>
-                      </div>
-                      <div className="p-2.5 rounded-xl border border-border bg-white shadow-2xs space-y-1">
-                        <span className="text-[10px] font-bold font-mono text-slate-900 block">DAG Routing</span>
-                        <span className="text-[9px] font-mono text-blue-700 font-semibold block">NY4 Colocated</span>
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 rounded-xl border border-border bg-white shadow-2xs flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] font-bold font-mono text-slate-900 block">Anti-Hallucination Telemetry</span>
-                        <span className="text-[9px] font-mono text-muted-foreground block">OPRA &amp; BVAL live feeds</span>
-                      </div>
-                      <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-800 border-emerald-300">
-                        Active Sync
-                      </Badge>
-                    </div>
+                  {/* Custom Builder Solid Blue Response Box matching screenshot */}
+                  <div className="bg-[#2563eb] text-white rounded-xl p-3.5 shadow-sm font-mono text-xs min-h-[95px] flex flex-col justify-between leading-relaxed select-text">
+                    <p className="whitespace-pre-wrap">{builderResponse}</p>
+                    {isBuildingResponse && (
+                      <span className="text-[10px] text-blue-200 animate-pulse pt-1 block">
+                        Calibrating agent parameters...
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Bottom Action / Input: Prompt the selected agent/subagent */}
+                {/* Bottom Prompt Bar with Send Arrow matching screenshot: [                             ➤ ] */}
                 <div className="pt-2 shrink-0">
-                  <Button
-                    type="button"
-                    onClick={() => setIsPromptModalOpen(true)}
-                    className="w-full font-mono text-xs h-9 bg-white hover:bg-slate-50 text-slate-900 border border-border rounded-xl font-semibold shadow-2xs gap-1.5 justify-center"
-                  >
-                    <Send className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Prompt the selected agent/subagent</span>
-                  </Button>
+                  <div className="relative flex items-center bg-white border border-border rounded-xl shadow-2xs focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                    <input
+                      type="text"
+                      value={customPromptInput}
+                      onChange={(e) => setCustomPromptInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSendCustomPrompt();
+                        }
+                      }}
+                      placeholder=""
+                      className="w-full py-2 pl-3 pr-9 text-xs font-mono bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendCustomPrompt}
+                      disabled={isBuildingResponse}
+                      className="absolute right-2 p-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                      title="Send prompt to Agent Custom Builder"
+                    >
+                      <Send className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
+                    </button>
+                  </div>
                 </div>
 
               </div>
