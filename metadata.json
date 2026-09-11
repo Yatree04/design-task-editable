@@ -1,0 +1,8 @@
+{
+  "name": "final sub v1",
+  "description": "Imported from GitHub: Yatree04/DE-Shaw-DT",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
