@@ -104,12 +104,51 @@ export type ViewTab =
   | 'optimizer' 
   | 'blotter';
 
+export type NodeHealth = 'HEALTHY' | 'DEGRADED' | 'QUARANTINED' | 'BREACHED';
+
+export type FailureKind =
+  | 'STALE_FEED'          // data snapshot aged past its refresh cycle
+  | 'GROUNDING_FAILED'    // a claim could not be verified against source
+  | 'LOW_CONFIDENCE'      // model confidence below the node's threshold
+  | 'LATENCY_BREACH'      // tool or feed exceeded its latency budget
+  | 'TOOL_ERROR'          // an upstream API or code node threw
+  | 'LIMIT_BREACH'        // VaR / concentration / drawdown limit crossed
+  | 'AGENT_CONFLICT';     // two subagents produced contradictory outputs
+
+export interface NodeFailure {
+  kind: FailureKind;
+  detectedAt: string;          // ISO timestamp
+  source: string;              // e.g. 'Equinix NY4 Tick L2 Stream'
+  detail: string;              // one human-readable sentence
+  autonomyBefore: string;      // e.g. 'Autonomous'
+  autonomyAfter: string;       // e.g. 'Act with approval'
+  blastRadius: string[];       // ids of downstream nodes now on unverified input
+  observed?: string;
+  whyItMatters?: string;
+  alreadyDone?: string;
+  recommendation?: string;
+  defaultAction?: string;
+  defaultActionCountdownSeconds?: number;
+  conflictDetails?: {
+    agentA: { name: string; action: string; confidence: number; evidence: string };
+    agentB: { name: string; action: string; confidence: number; evidence: string };
+    position: string;
+  };
+}
+
+export type PermissionLevel = 'Observe' | 'Propose' | 'Act with approval' | 'Act within limits' | 'Autonomous';
+
 export interface AgentNode {
   id: string;
   name: string;
   type: 'parent' | 'subagent' | 'data' | 'tool';
   role: string;
   status: 'ACTIVE' | 'READY' | 'DEPLOYED' | 'TESTING';
+  health: NodeHealth;
+  confidence: number;              // 0–1
+  lastGroundedAt: string;          // ISO timestamp
+  permissionLevel: PermissionLevel;
+  failure?: NodeFailure;
   inputs: string;
   description: string;
   outputLink: string;

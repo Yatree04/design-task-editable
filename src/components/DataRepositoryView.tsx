@@ -31,6 +31,7 @@ import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { ViewTab } from '../types';
 import { ResizableSplit } from './ui/ResizableSplit';
+import { useFailureState } from '../context/FailureContext';
 
 export interface DatasetColumn {
   name: string;
@@ -57,6 +58,9 @@ export interface DatasetItem {
   lastUpdated: string;
   isLiveStream: boolean;
   latency?: string;
+  feedHealth?: 'LIVE' | 'DELAYED' | 'DOWN';
+  affectedNodes?: string[];
+  stalenessReason?: string;
   tags: string[];
   schema: DatasetColumn[];
   sampleData: Record<string, string | number>[];
@@ -400,6 +404,7 @@ export const DataRepositoryView: React.FC<DataRepositoryViewProps> = ({
   onOpenAgentModal,
   onSelectTab,
 }) => {
+  const { isDegradationDemoRunning, models, setSelectedNodeId } = useFailureState();
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('ds-us-l2-depth');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -409,20 +414,46 @@ export const DataRepositoryView: React.FC<DataRepositoryViewProps> = ({
   const [exportSuccess, setExportSuccess] = useState<boolean>(false);
   const [showIngestModal, setShowIngestModal] = useState<boolean>(false);
   const [ingestSuccess, setIngestSuccess] = useState<boolean>(false);
-
-  // New dataset form state
   const [newDsName, setNewDsName] = useState<string>('');
   const [newDsIdentifier, setNewDsIdentifier] = useState<string>('');
-  const [newDsCategory, setNewDsCategory] = useState<'market-depth' | 'factor-alpha' | 'alternative-nlp' | 'execution-tca'>('market-depth');
-  const [newDsFormat, setNewDsFormat] = useState<'Parquet' | 'Arrow IPC' | 'Delta Lake' | 'Apache Iceberg' | 'ClickHouse'>('Parquet');
+  const [newDsCategory, setNewDsCategory] = useState<string>('market-depth');
+  const [newDsFormat, setNewDsFormat] = useState<string>('Parquet');
+
+  // Compute live dataset statuses with failure states
+  const enrichedDatasets = useMemo(() => {
+    return MOCK_DATASETS.map((ds) => {
+      if (ds.id === 'ds-options-vol' && isDegradationDemoRunning) {
+        return {
+          ...ds,
+          feedHealth: 'DELAYED' as 'LIVE' | 'DELAYED' | 'DOWN',
+          lastUpdated: '28m ago (SLA: 15m breach)',
+          stalenessReason: 'Broker OPRA bridge queue backlog > 120,000 messages',
+          affectedNodes: ['node-6', 'node-2'],
+        };
+      }
+      if (ds.id === 'ds-sec-xbrl' && isDegradationDemoRunning) {
+        return {
+          ...ds,
+          feedHealth: 'DELAYED' as 'LIVE' | 'DELAYED' | 'DOWN',
+          lastUpdated: '35m ago (ETL Parser Timeout)',
+          stalenessReason: '10-Q schema mismatch on footnote 14 free cash flow disclosures',
+          affectedNodes: ['node-4'],
+        };
+      }
+      return {
+        ...ds,
+        feedHealth: 'LIVE' as 'LIVE' | 'DELAYED' | 'DOWN',
+      };
+    });
+  }, [isDegradationDemoRunning]);
 
   const selectedDataset = useMemo(() => {
-    return MOCK_DATASETS.find(d => d.id === selectedDatasetId) || MOCK_DATASETS[0];
-  }, [selectedDatasetId]);
+    return enrichedDatasets.find(d => d.id === selectedDatasetId) || enrichedDatasets[0];
+  }, [enrichedDatasets, selectedDatasetId]);
 
   // Filter datasets
   const filteredDatasets = useMemo(() => {
-    return MOCK_DATASETS.filter(item => {
+    return enrichedDatasets.filter(item => {
       const matchCat = activeCategory === 'all' || item.category === activeCategory;
       const matchSearch = searchQuery.trim() === '' || 
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -431,7 +462,7 @@ export const DataRepositoryView: React.FC<DataRepositoryViewProps> = ({
         item.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchCat && matchSearch;
     });
-  }, [activeCategory, searchQuery]);
+  }, [enrichedDatasets, activeCategory, searchQuery]);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(selectedDataset.querySnippet);
@@ -593,7 +624,17 @@ export const DataRepositoryView: React.FC<DataRepositoryViewProps> = ({
                         {ds.categoryLabel}
                       </span>
                       <div className="flex items-center gap-1 text-[9px] font-mono">
-                        {ds.isLiveStream ? (
+                        {ds.feedHealth === 'DELAYED' ? (
+                          <span className="flex items-center gap-1 text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-bold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            DELAYED
+                          </span>
+                        ) : ds.feedHealth === 'DOWN' ? (
+                          <span className="flex items-center gap-1 text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200 font-bold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            DOWN
+                          </span>
+                        ) : ds.isLiveStream ? (
                           <span className="flex items-center gap-1 text-emerald-700 font-semibold">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             LIVE
@@ -619,9 +660,26 @@ export const DataRepositoryView: React.FC<DataRepositoryViewProps> = ({
                       {ds.description}
                     </p>
 
+                    {ds.affectedNodes && ds.affectedNodes.length > 0 && (
+                      <div className="mt-1.5 p-1.5 rounded-md bg-amber-50/70 border border-amber-200 text-[9.5px] font-mono flex items-center justify-between">
+                        <span className="text-amber-800 font-semibold">Affects {ds.affectedNodes.length} Agent Node(s)</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedNodeId(ds.affectedNodes![0]);
+                            if (onSelectTab) onSelectTab('agent-builder');
+                          }}
+                          className="px-1.5 py-0.5 rounded bg-white border border-amber-300 text-amber-900 font-bold hover:bg-amber-100 transition-all text-[9px]"
+                        >
+                          Inspect Node ↗
+                        </button>
+                      </div>
+                    )}
+
                     <div className="mt-2 pt-1.5 border-t border-border/50 flex items-center justify-between text-[9px] font-mono text-muted-foreground">
                       <span>Format: <strong>{ds.format}</strong></span>
-                      <span>Quality: <strong className="text-emerald-700">{ds.completeness}</strong></span>
+                      <span>Quality: <strong className={ds.feedHealth === 'DELAYED' ? 'text-amber-700 font-bold' : 'text-emerald-700'}>{ds.completeness}</strong></span>
                     </div>
                   </div>
                 );

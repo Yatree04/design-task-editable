@@ -29,6 +29,7 @@ interface OverviewViewProps {
   onNavigateToOptimizer: () => void;
   onNavigateToScenarios: () => void;
   onNavigateToHoldings?: () => void;
+  onNavigateToAgentWorkspace?: () => void;
   currency?: 'INR' | 'USD';
   searchQuery?: string;
   onSelectHolding?: (holding: Holding) => void;
@@ -74,6 +75,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   onNavigateToOptimizer,
   onNavigateToScenarios,
   onNavigateToHoldings,
+  onNavigateToAgentWorkspace,
   currency = 'INR',
   searchQuery = '',
   onSelectHolding,

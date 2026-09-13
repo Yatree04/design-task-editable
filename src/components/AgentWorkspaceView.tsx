@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ViewTab, WorkspaceModel } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ViewTab, WorkspaceModel, AgentNode, NodeHealth, PermissionLevel, NodeFailure } from '../types';
 import { 
   Bot, 
   GitBranch, 
@@ -47,7 +47,17 @@ import {
   GripHorizontal,
   Move,
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  Activity,
+  AlertTriangle,
+  Scale,
+  PlayCircle,
+  ShieldAlert,
+  Radio,
+  Lock,
+  Unlock,
+  History,
+  CheckCheck
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
@@ -55,29 +65,13 @@ import { Input } from './ui/input';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { AgentBacktestSandbox } from './AgentBacktestSandbox';
+import { useFailureState } from '../context/FailureContext';
+import { EscalationCard, EscalationItem } from './EscalationCard';
 
-export type CanvasViewMode = 'matrix' | 'Node' | 'code';
+export type CanvasViewMode = 'matrix' | 'Node' | 'code' | 'governance';
 export type RepoFilter = 'all' | 'codebases' | 'subagents' | 'templates' | 'data';
-export type RightPanelTab = 'agent' | 'instructions' | 'code' | 'sandbox';
+export type RightPanelTab = 'agent' | 'instructions' | 'code' | 'sandbox' | 'health' | 'escalations';
 export type BottomDrawerTab = 'all' | 'skills' | 'code' | 'inputs' | 'risk' | 'firm_ideas' | 'research_papers';
-
-export interface AgentNode {
-  id: string;
-  name: string;
-  type: 'parent' | 'subagent' | 'data' | 'tool';
-  role: string;
-  status: 'ACTIVE' | 'READY' | 'DEPLOYED' | 'TESTING';
-  inputs: string;
-  description: string;
-  outputLink: string;
-  instructions: string;
-  defaultProperty: string;
-  codeSnippet: string;
-  tools: string[];
-  latency: string;
-  x: number;
-  y: number;
-}
 
 export interface ResourceItem {
   id: string;
@@ -93,292 +87,6 @@ export interface ResourceItem {
   codeSnippet: string;
   isHot?: boolean;
 }
-
-const DEFAULT_CORE_NODES: AgentNode[] = [
-  {
-    id: 'node-1',
-    name: 'Research Judgement agent',
-    type: 'parent',
-    role: 'Parent Orchestrator',
-    status: 'ACTIVE',
-    description: 'Parent qualitative reasoning & macro orchestration model. Aggregates multi-agent market hypotheses and calibrates macro beta overlays.',
-    inputs: 'Macro statements, Fed minutes, equity consensus revisions & portfolio VaR limits',
-    outputLink: 'Node 2 (Market trend refereall) & Node 3 (Data)',
-    instructions: 'Ingest macro events, assess qualitative fundamentals, and orchestrate specialized sub-agents to calibrate portfolio hedges under strict risk bounds (Daily VaR < 1.50%).',
-    defaultProperty: 'Highest Sharpe Weighting',
-    codeSnippet: `# DE SHAW RESEARCH JUDGEMENT PARENT AGENT
-class ResearchJudgementAgent(QuantParentAgent):
-    def __init__(self, risk_limit_var=0.015):
-        super().__init__(name="Research Judgement agent")
-        self.risk_limit_var = risk_limit_var
-        self.sub_agents = ["market_trend_ref", "factor_covariance_matrix"]
-        
-    def orchestrate_rebalance(self, macro_signal: MacroSignal, var_state: float):
-        if var_state > self.risk_limit_var:
-            hedge_orders = self.delegate_risk_neutralization(macro_signal)
-            return self.route_to_terminal_gate(hedge_orders)
-        return self.optimize_sharpe_frontier(alpha_target=0.18)`,
-    tools: ['Macro News Wire', 'Earnings Transcript Parser', 'Barra Risk API'],
-    latency: '18ms',
-    x: 35,
-    y: 155,
-  },
-  {
-    id: 'node-2',
-    name: 'Market trend refereall',
-    type: 'subagent',
-    role: 'Sub-Agent: Feature Extractor',
-    status: 'DEPLOYED',
-    description: 'Monitors hyperscaler capital expenditures, AI semiconductor supply chains, and sovereign bond curve dynamics.',
-    inputs: 'Live yield spreads, hyperscaler Capex reports & commodities futures',
-    outputLink: 'Execution Sub-Agent (Terminal Node)',
-    instructions: 'Monitor real-time sector momentum rotations and identify cross-asset lead-lag relationships across global technology and energy supply chains.',
-    defaultProperty: 'Factor Neutral Union',
-    codeSnippet: `# MARKET TREND REFERRAL SUB-AGENT
-class MarketTrendReferralSubAgent(FeatureExtractor):
-    def extract_momentum_factors(self, tick_stream: TickStream):
-        spread_lead = self.calculate_yield_spread_beta(tick_stream)
-        capex_momentum = self.evaluate_hyperscaler_spend()
-        return FactorVector(lead_lag=spread_lead, momentum=capex_momentum)`,
-    tools: ['L3 Market Depth Feeder', 'Real-Time Momentum Engine', 'Sentiment Classifier'],
-    latency: '12ms',
-    x: 290,
-    y: 45,
-  },
-  {
-    id: 'node-3',
-    name: 'Data & Factor Matrix',
-    type: 'data',
-    role: 'Quantitative Feature Store',
-    status: 'ACTIVE',
-    description: 'Ultra-low latency colocation feature store aggregating Barra risk factor exposures, covariance matrices, and cross-asset beta parameters.',
-    inputs: 'Barra Factor Covariance, Bloomberg BVAL & Equinix NY4 raw L2 orderbook feeds',
-    outputLink: 'Market trend refereall & Terminal Gate',
-    instructions: 'Continuously refresh rolling 30-day covariance matrices and stream orthogonalized factor alphas to downstream decision nodes.',
-    defaultProperty: 'Conservative 15c3-5 Check',
-    codeSnippet: `# FACTOR COVARIANCE FEATURE STORE
-class DataFactorMatrixNode(DataNode):
-    def compute_orthogonal_alphas(self, raw_ticks: MarketDepth):
-        cleaned_cov = self.eigen_factor_cleaner(raw_ticks)
-        return self.barra_engine.orthogonalize(cleaned_cov)`,
-    tools: ['Equinix NY4 Direct Feed', 'Barra Multiple-Horizon Risk Model', 'KDB+ Tick Store'],
-    latency: '4ms',
-    x: 270,
-    y: 255,
-  },
-  {
-    id: 'node-4',
-    name: 'Execution Sub-Agent',
-    type: 'tool',
-    role: 'Terminal Execution Gate',
-    status: 'READY',
-    description: 'Pre-trade compliance checker and smart order router executing algorithmic fills via FIX 4.4.',
-    inputs: 'Target allocation delta vectors from Research Judgement agent and feature sub-agents',
-    outputLink: 'Institutional OMS / Trade Blotter (FIX 4.4 Port 9800)',
-    instructions: 'Validate order sizes against SEC 15c3-5 market access rules, cap single-name concentration at 10%, and route via TWAP/VWAP algorithms.',
-    defaultProperty: 'Strict 10% Capped',
-    codeSnippet: `# SEC 15c3-5 COMPLIANT EXECUTION GATE
-class ExecutionSubAgentGate(TerminalGate):
-    def route_blotter_order(self, target_order: OrderRequest):
-        if self.compliance_check_15c3_5(target_order):
-            return self.fix_router.dispatch_twap(target_order)
-        raise RiskBreachException("SEC 15c3-5 Gate Triggered")`,
-    tools: ['FIX 4.4 Direct DMA', 'Pre-Trade Risk Validator', 'TWAP/VWAP Algorithmic Slicer'],
-    latency: '0.08ms',
-    x: 480,
-    y: 155,
-  }
-];
-
-const INITIAL_WORKSPACE_MODELS: WorkspaceModel[] = [
-  {
-    id: 'model-1',
-    name: 'Production Core',
-    tag: 'Core Orchestrator',
-    version: 'v1.0',
-    description: 'Primary production multi-agent architecture with Research Judgement parent node, trend referral sub-agent, and SEC 15c3-5 execution gate.',
-    targetVol: 14,
-    maxPosition: 10,
-    varLimit: 1.25,
-    expectedSharpe: 1.84,
-    expectedReturn: 13.8,
-    color: '#2563eb', // Blue
-    nodes: DEFAULT_CORE_NODES,
-  },
-  {
-    id: 'model-2',
-    name: 'Delta-Neutral Alpha',
-    tag: 'Stat-Arb Overlay',
-    version: 'v1.2',
-    description: 'High-frequency statistical arbitrage model with tighter VaR limit (1.05%), L2 orderbook imbalance extractor, and dynamic delta-neutral hedging.',
-    targetVol: 11,
-    maxPosition: 8,
-    varLimit: 1.05,
-    expectedSharpe: 2.15,
-    expectedReturn: 15.6,
-    color: '#10b981', // Emerald
-    nodes: [
-      {
-        id: 'node-stat-parent',
-        name: 'Stat-Arb Parent Orchestrator',
-        type: 'parent',
-        role: 'Parent Orchestrator',
-        status: 'ACTIVE',
-        description: 'Orchestrates high-frequency statistical arbitrage and cointegration mean-reversion trades.',
-        inputs: 'Implied Volatility Surface, Order Imbalances & Cointegration Baskets',
-        outputLink: 'Delta-Neutral Execution Gate',
-        instructions: 'Monitor co-integrated equity pairs and route high-turnover arbitrage sweeps under strict delta-neutral constraints.',
-        defaultProperty: 'Highest Sharpe Weighting',
-        codeSnippet: `# STATISTICAL ARBITRAGE PARENT
-class StatArbParentAgent(QuantParentAgent):
-    def evaluate_spreads(self, z_scores):
-        if abs(z_scores.current) > 2.2:
-            return self.execute_pair_mean_reversion(z_scores)`,
-        tools: ['Cointegration Engine', 'Barra Risk API', 'Z-Score Monitor'],
-        latency: '8ms',
-        x: 30,
-        y: 110,
-      },
-      {
-        id: 'node-stat-sub',
-        name: 'L2 Order Imbalance Extractor',
-        type: 'subagent',
-        role: 'Sub-Agent: Feature Extractor',
-        status: 'READY',
-        description: 'Extracts microsecond queue depth imbalances and calculates real-time VPIN order flow toxicity.',
-        inputs: 'NASDAQ ITCH 5.0 Depth Feed',
-        outputLink: 'Stat-Arb Parent Orchestrator',
-        instructions: 'Extract microsecond queue depth imbalances and compute real-time VPIN toxicity scores.',
-        defaultProperty: 'Factor Neutral Union',
-        codeSnippet: `# L2 DEPTH FEATURE EXTRACTOR
-class L2DepthExtractor(FeatureExtractor):
-    def compute_vpin(self, tick_feed):
-        return self.toxicity_engine.calculate_volume_sync(tick_feed)`,
-        tools: ['ITCH 5.0 Processor', 'FPGA Tick Sizer'],
-        latency: '0.04ms',
-        x: 220,
-        y: 25,
-      },
-      {
-        id: 'node-stat-data',
-        name: 'Tick & Microstructure Store',
-        type: 'data',
-        role: 'Quantitative Feature Store',
-        status: 'ACTIVE',
-        description: 'High-speed 50-nanosecond tick colocation buffer at Equinix NY4.',
-        inputs: 'Equinix NY4 raw L2/L3 colocation feed',
-        outputLink: 'L2 Order Imbalance Extractor',
-        instructions: 'Maintain 50-nanosecond tick buffers and trade-at-settlement historical snapshots.',
-        defaultProperty: 'Conservative 15c3-5 Check',
-        codeSnippet: `# TICK FEATURE STORE
-class TickFeatureStore(DataNode):
-    def get_order_book(self, symbol):
-        return self.ny4_colo.snapshot(symbol)`,
-        tools: ['NY4 Colocation Direct', 'KDB+/q Tick'],
-        latency: '0.08ms',
-        x: 200,
-        y: 195,
-      },
-      {
-        id: 'node-stat-gate',
-        name: 'Delta-Neutral Execution DMA Gate',
-        type: 'tool',
-        role: 'Terminal Execution Gate',
-        status: 'READY',
-        description: 'Enforces pre-trade portfolio delta limits and executes paired DMA sweeps.',
-        inputs: 'Calculated arbitrage legs and hedge ratios',
-        outputLink: 'Direct Market Access (FIX 4.4)',
-        instructions: 'Enforce pre-trade portfolio delta < ±0.02 and route paired limit orders simultaneously.',
-        defaultProperty: 'Strict Delta Capped',
-        codeSnippet: `# DELTA-NEUTRAL EXECUTION GATE
-class DeltaNeutralGate(TerminalGate):
-    def execute_paired_sweep(self, long_leg, short_leg):
-        if self.verify_delta_neutrality(long_leg, short_leg):
-            return self.route_dual_dma(long_leg, short_leg)`,
-        tools: ['FIX 4.4 Engine', 'Pre-Trade SEC 15c3-5 Gate'],
-        latency: '0.04ms',
-        x: 390,
-        y: 110,
-      }
-    ]
-  },
-  {
-    id: 'model-3',
-    name: 'Macro Rebalance Overlay',
-    tag: 'Macro Overlay',
-    version: 'v2.0',
-    description: 'Rates shock hedge with Barra covariance multi-factor neutralization and cross-asset sovereign yield curve tracking.',
-    targetVol: 16,
-    maxPosition: 14,
-    varLimit: 1.40,
-    expectedSharpe: 1.95,
-    expectedReturn: 14.2,
-    color: '#8b5cf6', // Purple
-    nodes: [
-      {
-        id: 'node-macro-parent',
-        name: 'Yield Curve Macro Orchestrator',
-        type: 'parent',
-        role: 'Parent Orchestrator',
-        status: 'ACTIVE',
-        description: 'Models sovereign yield curve dynamics and macro factor shifts.',
-        inputs: 'US 2Y/10Y curve, ECB minutes, breakeven inflation rates',
-        outputLink: 'Barra Factor Covariance Sub-Agent',
-        instructions: 'Model term structure twists and apply duration hedges across macro portfolios.',
-        defaultProperty: 'Highest Sharpe Weighting',
-        codeSnippet: `# MACRO YIELD CURVE ORCHESTRATOR
-class MacroCurveOrchestrator(QuantParentAgent):
-    def model_term_structure(self, yield_curve):
-        steepener_signal = yield_curve.ten_year - yield_curve.two_year
-        return self.rebalance_duration_exposure(steepener_signal)`,
-        tools: ['Fed Funds Live', 'Bloomberg BVAL Feeder', 'Barra Multi-Factor'],
-        latency: '24ms',
-        x: 30,
-        y: 110,
-      },
-      {
-        id: 'node-macro-sub',
-        name: 'Barra Factor Covariance Sub-Agent',
-        type: 'subagent',
-        role: 'Sub-Agent: Risk Neutralizer',
-        status: 'DEPLOYED',
-        description: 'Barra multi-factor risk model decomposes active risk and neutralizes style tilts.',
-        inputs: 'Cross-asset factor risk model covariance matrix',
-        outputLink: 'Terminal Gate',
-        instructions: 'Decompose active risk and neutralize style factor tilt extremes.',
-        defaultProperty: 'Factor Neutral Union',
-        codeSnippet: `# FACTOR COVARIANCE NEUTRALIZER
-class FactorCovarianceNeutralizer(FeatureExtractor):
-    def compute_active_betas(self, factor_matrix):
-        return self.barra_api.decompose_risk(factor_matrix)`,
-        tools: ['Barra Risk Model', 'Eigenvalue Decomposer'],
-        latency: '15ms',
-        x: 220,
-        y: 25,
-      },
-      {
-        id: 'node-macro-gate',
-        name: 'Cross-Asset Futures DMA Router',
-        type: 'tool',
-        role: 'Terminal Execution Gate',
-        status: 'READY',
-        description: 'Direct DMA execution router for treasury futures and duration hedge baskets.',
-        inputs: 'Treasury futures and ETF hedging baskets',
-        outputLink: 'CME Globex Gateway',
-        instructions: 'Route interest rate futures hedges to execute macro duration adjustments.',
-        defaultProperty: 'Conservative 15c3-5 Check',
-        codeSnippet: `# CME FUTURES GATE
-class CMEFuturesGate(TerminalGate):
-    def route_hedge(self, duration_contracts):
-        return self.globex_router.send_order(duration_contracts)`,
-        tools: ['CME Globex API', 'SEC 15c3-5 Pre-Trade Check'],
-        latency: '2ms',
-        x: 390,
-        y: 110,
-      }
-    ]
-  }
-];
 
 // Comprehensive Firm Resource & Research Repository Catalog
 const ENTERPRISE_RESOURCES: ResourceItem[] = [
@@ -660,14 +368,48 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
   importedModel,
   onClearImportedModel
 }) => {
-  // Multi-Model Management State
-  const [models, setModels] = useState<WorkspaceModel[]>(INITIAL_WORKSPACE_MODELS);
-  const [activeModelId, setActiveModelId] = useState<string>('model-1');
+  // Use centralized Failure Context for models, failure states, escalations and demo sequence
+  const {
+    models,
+    setModels,
+    activeModelId,
+    setActiveModelId,
+    activeModel,
+    selectedNodeId: contextSelectedNodeId,
+    setSelectedNodeId: setContextSelectedNodeId,
+    selectedNode,
+    regroundNode,
+    restoreAutonomy,
+    pauseNode,
+    handToHuman,
+    triggerLiveDegradationDemo,
+    resetDemo,
+    isDemoRunning,
+    demoNotification,
+    escalations,
+    pendingEscalations,
+    handleEscalationAction,
+    healthCounts,
+  } = useFailureState();
+
+  const allNodes = useMemo(() => models.flatMap((m) => m.nodes), [models]);
+  const healthyCount = allNodes.filter((n) => !n.health || n.health === 'HEALTHY').length;
+  const degradedCount = allNodes.filter((n) => n.health === 'DEGRADED').length;
+  const quarantinedCount = allNodes.filter((n) => n.health === 'QUARANTINED').length;
+  const breachedCount = allNodes.filter((n) => n.health === 'BREACHED').length;
+  const avgConfidence = allNodes.length > 0
+    ? (allNodes.reduce((acc, n) => acc + (n.confidence ?? 0.94), 0) / allNodes.length * 100).toFixed(1)
+    : '94.2';
+
+  // Conflict arbitration state in Governance tab
+  const [arbitrationChoice, setArbitrationChoice] = useState<'split' | 'momentum' | 'beta_neutral' | 'freeze'>('split');
+  const [arbitrationCustomNotes, setArbitrationCustomNotes] = useState<string>('');
+  const [isArbitrationCommitted, setIsArbitrationCommitted] = useState<boolean>(false);
+
   const [sandboxInitialMode, setSandboxInitialMode] = useState<'single' | 'compare' | 'merge'>('single');
   const [isNewModelMenuOpen, setIsNewModelMenuOpen] = useState<boolean>(false);
-
-  // Active Model resolution
-  const activeModel = models.find(m => m.id === activeModelId) || models[0];
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [arbitrationEscalation, setArbitrationEscalation] = useState<EscalationItem | null>(null);
 
   // Listen for imported model from AI Optimisation Window
   useEffect(() => {
@@ -684,7 +426,7 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
         onClearImportedModel();
       }
     }
-  }, [importedModel, onClearImportedModel]);
+  }, [importedModel, onClearImportedModel, setModels, setActiveModelId]);
 
   // View mode switcher: matrix / Node / code
   const [viewMode, setViewMode] = useState<CanvasViewMode>('Node');
@@ -692,21 +434,10 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
   // Repository filter pills: [ All ] [ Code bases ] [ sub agents ] [ sub agents ]
   const [repoFilter, setRepoFilter] = useState<RepoFilter>('all');
 
-  // Selected node state for Inspector
-  const [selectedNodeId, setSelectedNodeId] = useState<string>(activeModel.nodes[0]?.id || 'node-1');
+  const selectedNodeId = contextSelectedNodeId || activeModel.nodes[0]?.id || 'node-1';
+  const setSelectedNodeId = (id: string) => setContextSelectedNodeId(id);
 
-  // Sync selected node with active model
-  useEffect(() => {
-    if (activeModel && activeModel.nodes.length > 0) {
-      if (!activeModel.nodes.some(n => n.id === selectedNodeId)) {
-        setSelectedNodeId(activeModel.nodes[0].id);
-      }
-    }
-  }, [activeModel, selectedNodeId]);
-
-  const selectedNode = activeModel.nodes.find(n => n.id === selectedNodeId) || activeModel.nodes[0] || DEFAULT_CORE_NODES[0];
-
-  // Right Panel Tabs: [ Agent | Instructions | Code | Backtest Sandbox ]
+  // Right Panel Tabs: [ Agent | Instructions | Code | Backtest Sandbox | Health ]
   const [rightTab, setRightTab] = useState<RightPanelTab>('agent');
 
   // Canvas Inspector Editable fields for selected agent
@@ -737,6 +468,7 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
     'node-4': 10,
   });
   const [refreshingNodeId, setRefreshingNodeId] = useState<string | null>(null);
+  const [isAiSuggestionExpanded, setIsAiSuggestionExpanded] = useState<boolean>(false);
 
   // Agent Custom Builder response & prompt state matching screenshot
   const [builderResponse, setBuilderResponse] = useState<string>('agent response etc etc');
@@ -804,6 +536,25 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
   // Audit modal state
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
+  // Dynamic Matrix Factors State
+  const [matrixFactors, setMatrixFactors] = useState<Array<{
+    id: string;
+    name: string;
+    category: string;
+    alphaBeta: string;
+    momentum: string;
+    volSensitivity: string;
+    corrNY4: string;
+    isCustom?: boolean;
+  }>>([
+    { id: 'm-1', name: 'Research Judgement', category: 'Orchestrator', alphaBeta: '1.00', momentum: '0.42', volSensitivity: '0.12', corrNY4: '0.88' },
+    { id: 'm-2', name: 'Market Trend Referral', category: 'Momentum', alphaBeta: '0.42', momentum: '1.00', volSensitivity: '0.68', corrNY4: '0.94' },
+    { id: 'm-3', name: 'Data & Factor Store', category: 'Feature Store', alphaBeta: '0.12', momentum: '0.68', volSensitivity: '1.00', corrNY4: '0.99' },
+  ]);
+
+  // Active Resource Action Menu dropdown state (by item id)
+  const [activeResourceActionMenu, setActiveResourceActionMenu] = useState<string | null>(null);
+
   // Extensible Bottom Enterprise Resource Drawer State
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState<boolean>(false);
   const [resourceCategory, setResourceCategory] = useState<BottomDrawerTab>('all');
@@ -817,6 +568,107 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
     setTimeout(() => {
       setResourceNotification(null);
     }, 3500);
+  };
+
+  // Option 1: Add to Node (as a new DAG Node or attached to currently selected node)
+  const handleAddResourceToNode = (resource: ResourceItem, mode: 'new' | 'append' = 'new') => {
+    if (mode === 'append' && selectedNode) {
+      const updatedTools = Array.from(new Set([...selectedNode.tools, ...resource.tools]));
+      const updatedInstructions = `${selectedNode.instructions} Includes ${resource.name} (${resource.defaultProperty}).`;
+      const updatedDesc = `${selectedNode.description} Integrated with ${resource.name}.`;
+
+      setModels(prev => prev.map(m => {
+        if (m.id !== activeModelId) return m;
+        return {
+          ...m,
+          nodes: m.nodes.map(n => n.id === selectedNode.id ? {
+            ...n,
+            tools: updatedTools,
+            instructions: updatedInstructions,
+            description: updatedDesc,
+          } : n)
+        };
+      }));
+
+      setViewMode('Node');
+      showResourceFeedback(`Attached "${resource.name}" capabilities to "${selectedNode.name}"`);
+    } else {
+      handleAddResourceToModel(resource);
+      setViewMode('Node');
+    }
+  };
+
+  // Option 2: Add to Matrix (as a Factor vector stream in the Covariance Matrix)
+  const handleAddResourceToMatrix = (resource: ResourceItem) => {
+    const randomAlpha = (0.2 + Math.random() * 0.7).toFixed(2);
+    const randomMom = (0.3 + Math.random() * 0.6).toFixed(2);
+    const randomVol = (0.1 + Math.random() * 0.5).toFixed(2);
+    const randomCorr = (0.85 + Math.random() * 0.12).toFixed(2);
+
+    const newFactor = {
+      id: `factor-${Date.now()}`,
+      name: resource.name,
+      category: resource.badge || 'Quant Factor',
+      alphaBeta: randomAlpha,
+      momentum: randomMom,
+      volSensitivity: randomVol,
+      corrNY4: randomCorr,
+      isCustom: true,
+    };
+
+    setMatrixFactors(prev => [...prev, newFactor]);
+
+    // Also enrich node-3 (Data & Factor Matrix) if present
+    setModels(prev => prev.map(m => {
+      if (m.id !== activeModelId) return m;
+      return {
+        ...m,
+        nodes: m.nodes.map(n => {
+          if (n.type === 'data' || n.id === 'node-3') {
+            return {
+              ...n,
+              inputs: `${n.inputs}, ${resource.name}`,
+              tools: Array.from(new Set([...n.tools, ...resource.tools])),
+            };
+          }
+          return n;
+        })
+      };
+    }));
+
+    setViewMode('matrix');
+    showResourceFeedback(`Added "${resource.name}" factor stream to Factor Matrix`);
+  };
+
+  // Option 3: Add to Code (injects Python code snippet into active editor)
+  const handleAddResourceToCode = (resource: ResourceItem) => {
+    const injectedComment = `\n\n# ========================================================\n# INJECTED FROM REPOSITORY: ${resource.name.toUpperCase()}\n# Category: ${resource.badge} | Latency: ${resource.latency}\n# ========================================================\n${resource.codeSnippet}\n`;
+
+    setModels(prev => prev.map(m => {
+      if (m.id !== activeModelId) return m;
+      return {
+        ...m,
+        nodes: m.nodes.map(n => {
+          if (n.id === selectedNode.id) {
+            return {
+              ...n,
+              codeSnippet: `${n.codeSnippet}${injectedComment}`
+            };
+          }
+          return n;
+        })
+      };
+    }));
+
+    setViewMode('code');
+    setRightTab('code');
+    showResourceFeedback(`Injected "${resource.name}" Python code into ${selectedNode.name}`);
+  };
+
+  // Remove custom matrix factor
+  const handleRemoveMatrixFactor = (factorId: string) => {
+    setMatrixFactors(prev => prev.filter(f => f.id !== factorId));
+    showResourceFeedback('Removed factor from covariance matrix');
   };
 
   // Instantiate resource item as a node in the active model
@@ -835,6 +687,10 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
       type: resource.type,
       role: resource.subtitle,
       status: 'READY',
+      health: 'HEALTHY',
+      confidence: 0.95,
+      lastGroundedAt: new Date().toISOString(),
+      permissionLevel: 'Autonomous',
       description: resource.description,
       inputs: resource.type === 'data' ? 'Direct Exchange Optical Stream / KDB+' : 'Factor Matrix & Tick Feeds',
       outputLink: resource.type === 'tool' ? 'CME Globex DMA Router' : 'Downstream Execution Gate',
@@ -874,6 +730,10 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
           type: 'parent',
           role: resource.subtitle,
           status: 'ACTIVE',
+          health: 'HEALTHY',
+          confidence: 0.95,
+          lastGroundedAt: new Date().toISOString(),
+          permissionLevel: 'Autonomous',
           description: resource.description,
           inputs: 'Macro signals, yields, and firm quantitative streams',
           outputLink: 'Execution Sub-Agent & Terminal DMA',
@@ -891,6 +751,10 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
           type: 'data',
           role: 'Quantitative Feature Store',
           status: 'ACTIVE',
+          health: 'HEALTHY',
+          confidence: 0.95,
+          lastGroundedAt: new Date().toISOString(),
+          permissionLevel: 'Autonomous',
           description: 'Historical Barra rolling covariance matrix for factor-neutral hedging.',
           inputs: 'Barra Multi-Horizon Risk Feed',
           outputLink: resource.name,
@@ -908,6 +772,10 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
           type: 'tool',
           role: 'Terminal Execution Gate',
           status: 'READY',
+          health: 'HEALTHY',
+          confidence: 0.95,
+          lastGroundedAt: new Date().toISOString(),
+          permissionLevel: 'Autonomous',
           description: 'Pre-trade compliance & credit collar gate.',
           inputs: 'Execution orders',
           outputLink: 'DMA Terminal',
@@ -971,6 +839,10 @@ export const AgentWorkspaceView: React.FC<AgentWorkspaceViewProps> = ({
             type: 'parent',
             role: 'Parent Orchestrator',
             status: 'ACTIVE',
+            health: 'HEALTHY',
+            confidence: 0.95,
+            lastGroundedAt: new Date().toISOString(),
+            permissionLevel: 'Autonomous',
             description: 'Option implied volatility term structure arbitrageur harvesting skew risk premia.',
             inputs: 'CBOE IV Term Structure, S&P 500 options chain',
             outputLink: 'Variance Swap Execution Gate',
@@ -1007,6 +879,10 @@ class VolSkewAgent(QuantParentAgent):
             type: 'parent',
             role: 'Parent Orchestrator',
             status: 'READY',
+            health: 'HEALTHY',
+            confidence: 0.95,
+            lastGroundedAt: new Date().toISOString(),
+            permissionLevel: 'Autonomous',
             description: 'Custom parent decision orchestrator for quantitative strategy execution.',
             inputs: 'Market Data Feeds',
             outputLink: 'Execution Gate',
@@ -1336,21 +1212,94 @@ class VolSkewAgent(QuantParentAgent):
         </div>
       )}
 
+      {/* AGENT FLEET HEALTH & GOVERNANCE STRIP */}
+      <div className="bg-white border border-border rounded-xl px-3 py-2 shadow-2xs font-mono flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-blue-600" />
+            <span className="font-bold text-slate-900">Agent Fleet Health:</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
+              {healthyCount} Healthy
+            </span>
+            {degradedCount > 0 && (
+              <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-300 font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                {degradedCount} Degraded
+              </span>
+            )}
+            {quarantinedCount > 0 && (
+              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-300 font-bold">
+                {quarantinedCount} Quarantined
+              </span>
+            )}
+            {breachedCount > 0 && (
+              <span className="px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-300 font-bold">
+                {breachedCount} Breached
+              </span>
+            )}
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground border-l border-slate-200 pl-2.5">
+            <span>Avg Confidence:</span>
+            <span className="font-bold text-slate-800">{avgConfidence}%</span>
+          </div>
+
+          {pendingEscalations.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('governance');
+                setRightTab('escalations');
+              }}
+              className="px-2.5 py-0.5 rounded-md bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-[11px] flex items-center gap-1.5 transition-all animate-pulse cursor-pointer shadow-2xs"
+            >
+              <AlertTriangle className="w-3 h-3 text-amber-600" />
+              <span>Awaiting Decision ({pendingEscalations.length})</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isDemoRunning ? (
+            <button
+              type="button"
+              onClick={resetDemo}
+              className="text-[11px] px-2.5 py-1 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 transition-all font-semibold cursor-pointer"
+            >
+              Reset State
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={triggerLiveDegradationDemo}
+              className="text-[11px] px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition-all font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              title="Simulate data feed stall and automated step-down to human review"
+            >
+              <Zap className="w-3 h-3 text-amber-600" />
+              <span>⚡ Demo Live Degradation</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Main 2-Panel Layout matching the updated sketch (Canvas + Bottom Tray on Left, Inspector on Right) */}
       <div className="flex-1 min-h-0 border border-border rounded-2xl bg-white shadow-xs overflow-hidden grid grid-cols-1 lg:grid-cols-12">
         
         {/* =========================================================================
             LEFT / CENTER MAIN AREA (Cols 1-8):
-            - Top Bar: [ matrix / Node / code ] + [ Version 1 ▼ ]
+            - Top Bar: [ matrix / Node / code / Governance ] + [ Version 1 ▼ ]
             - Canvas with DAG Nodes & Lower-Left AI Suggestion Reasoning Box
-            - Bottom Component Library Tray: [ Skills & subagents | Code & templates | Input nodes | Risk & compliance ]
+            - Bottom Component Repository Tray: [ Skills & subagents | Code & templates | Input nodes | Risk & compliance ]
            ========================================================================= */}
         <div className="lg:col-span-8 flex flex-col justify-between border-r border-border bg-white p-3 min-h-0 overflow-hidden">
           
-          {/* TOP CANVAS HEADER: "matrix / Node / code" + "Version 1 ▼" */}
+          {/* TOP CANVAS HEADER: "matrix / Node / code / Governance" + "Version 1 ▼" */}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-border shrink-0">
             
-            {/* Mode switch container: [ matrix / Node / code ] */}
+            {/* Mode switch container: [ matrix / Node / code / governance ] */}
             <div className="flex items-center px-2 py-0.5 rounded-xl border border-border bg-white font-mono text-xs shadow-2xs">
               <button
                 type="button"
@@ -1387,44 +1336,78 @@ class VolSkewAgent(QuantParentAgent):
               >
                 code
               </button>
+              <span className="text-muted-foreground mx-1">/</span>
+              <button
+                type="button"
+                onClick={() => setViewMode('governance')}
+                className={`px-2 py-0.5 rounded-md transition-all flex items-center gap-1.5 ${
+                  viewMode === 'governance'
+                    ? 'bg-amber-100 text-amber-900 font-bold border border-amber-300'
+                    : pendingEscalations.length > 0
+                    ? 'text-amber-700 font-bold hover:text-amber-900'
+                    : 'text-foreground hover:text-primary'
+                }`}
+              >
+                <ShieldAlert className="w-3 h-3" />
+                <span>governance</span>
+                {pendingEscalations.length > 0 && (
+                  <span className="px-1 py-0.2 rounded-full bg-amber-500 text-white text-[9px] font-mono leading-none">
+                    {pendingEscalations.length}
+                  </span>
+                )}
+              </button>
             </div>
 
-            {/* Version dropdown: [ Version 1 ▼ ] */}
-            <div className="relative">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
-                className="h-7 text-xs font-mono gap-1 text-foreground px-2.5 bg-white hover:bg-slate-50 border-border rounded-lg shadow-2xs"
+            <div className="flex items-center gap-2">
+              {/* Discreet Demo Live Degradation trigger */}
+              <button
+                type="button"
+                onClick={triggerLiveDegradationDemo}
+                disabled={isDemoRunning}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition-all shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="Trigger simulated live data stall & autonomy step-down demo"
               >
-                <span>{selectedVersion}</span>
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
-              </Button>
+                <Zap className={`w-3 h-3 text-amber-600 ${isDemoRunning ? 'animate-bounce' : ''}`} />
+                <span>{isDemoRunning ? 'Simulating Degradation...' : '⚡ Demo Live Degradation'}</span>
+              </button>
 
-              {isVersionDropdownOpen && (
-                <div className="absolute right-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-lg z-30 p-1 font-mono text-xs animate-in fade-in">
-                  {[
-                    'Version 1 (Production Core)',
-                    'Version 1.1 (Low Latency DMA)',
-                    'Version 1.2 (Delta-Neutral Alpha)',
-                    'Version 2.0-Alpha (Omni Macro)',
-                  ].map((v) => (
-                    <button
-                      key={v}
-                      onClick={() => {
-                        setSelectedVersion(v.split(' (')[0]);
-                        setIsVersionDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 flex items-center justify-between ${
-                        selectedVersion === v.split(' (')[0] ? 'text-blue-600 font-bold bg-blue-50' : 'text-foreground'
-                      }`}
-                    >
-                      <span>{v}</span>
-                      {selectedVersion === v.split(' (')[0] && <Check className="w-3 h-3 text-blue-600" />}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* Version dropdown: [ Version 1 ▼ ] */}
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsVersionDropdownOpen(!isVersionDropdownOpen)}
+                  className="h-7 text-xs font-mono gap-1 text-foreground px-2.5 bg-white hover:bg-slate-50 border-border rounded-lg shadow-2xs"
+                >
+                  <span>{selectedVersion}</span>
+                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                </Button>
+
+                {isVersionDropdownOpen && (
+                  <div className="absolute right-0 mt-1 w-56 bg-white border border-border rounded-xl shadow-lg z-30 p-1 font-mono text-xs animate-in fade-in">
+                    {[
+                      'Version 1 (Production Core)',
+                      'Version 1.1 (Low Latency DMA)',
+                      'Version 1.2 (Delta-Neutral Alpha)',
+                      'Version 2.0-Alpha (Omni Macro)',
+                    ].map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => {
+                          setSelectedVersion(v.split(' (')[0]);
+                          setIsVersionDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-50 flex items-center justify-between ${
+                          selectedVersion === v.split(' (')[0] ? 'text-blue-600 font-bold bg-blue-50' : 'text-foreground'
+                        }`}
+                      >
+                        <span>{v}</span>
+                        {selectedVersion === v.split(' (')[0] && <Check className="w-3 h-3 text-blue-600" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1456,179 +1439,345 @@ class VolSkewAgent(QuantParentAgent):
             {viewMode === 'Node' && (
               <div className="relative w-full h-full flex-1 overflow-auto">
                 {/* SVG Connections matching sketch topology */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 min-w-[680px] min-h-[350px]">
-                  <defs>
-                    <marker
-                      id="arrow"
-                      viewBox="0 0 10 10"
-                      refX="6"
-                      refY="5"
-                      markerWidth="6"
-                      markerHeight="6"
-                      orient="auto-start-reverse"
-                    >
-                      <path d="M 0 1 L 8 5 L 0 9 z" fill="#0f172a" opacity="0.95" />
-                    </marker>
-                  </defs>
+                {(() => {
+                  const blastRadiusNodeIds = new Set<string>();
+                  activeModel.nodes.forEach((n) => {
+                    if (n.failure?.blastRadius) {
+                      n.failure.blastRadius.forEach((id) => blastRadiusNodeIds.add(id));
+                    }
+                  });
 
-                  {/* Node 1 (Center-Left) -> Node 2 (Top-Middle) */}
-                  <path
-                    d="M 185 185 C 225 150, 255 90, 290 75"
-                    fill="none"
-                    stroke="#0f172a"
-                    strokeWidth="1.75"
-                    markerEnd="url(#arrow)"
-                  />
-
-                  {/* Node 1 (Center-Left) -> Node 3 (Feature Store / Bottom-Middle) */}
-                  <path
-                    d="M 185 210 C 220 235, 245 265, 270 280"
-                    fill="none"
-                    stroke="#0f172a"
-                    strokeWidth="1.75"
-                    markerEnd="url(#arrow)"
-                  />
-
-                  {/* Top-Left Inflow into Node 4 (Execution Sub-Agent) */}
-                  <path
-                    d="M 410 80 C 440 100, 460 130, 480 165"
-                    fill="none"
-                    stroke="#0f172a"
-                    strokeWidth="1.75"
-                    markerEnd="url(#arrow)"
-                  />
-
-                  {/* Node 4 Outflow to Top-Right */}
-                  <path
-                    d="M 610 165 C 630 140, 645 120, 665 100"
-                    fill="none"
-                    stroke="#0f172a"
-                    strokeWidth="1.75"
-                    markerEnd="url(#arrow)"
-                  />
-
-                  {/* Bottom-Left Inflow into Node 4 */}
-                  <path
-                    d="M 400 290 C 430 270, 455 240, 480 200"
-                    fill="none"
-                    stroke="#0f172a"
-                    strokeWidth="1.75"
-                    markerEnd="url(#arrow)"
-                  />
-
-                  {/* Node 4 Outflow to Bottom-Right */}
-                  <path
-                    d="M 610 200 C 630 230, 650 260, 675 285"
-                    fill="none"
-                    stroke="#0f172a"
-                    strokeWidth="1.75"
-                    markerEnd="url(#arrow)"
-                  />
-
-                  {/* Additional dynamic connection paths for added nodes */}
-                  {activeModel.nodes.length > 4 && activeModel.nodes.slice(4).map((n) => (
-                    <path
-                      key={n.id}
-                      d={`M ${n.x + 60} ${n.y + 40} C ${n.x + 90} ${n.y + 70}, 380 140, 470 120`}
-                      fill="none"
-                      stroke="#64748b"
-                      strokeWidth="1.25"
-                      strokeDasharray="4,4"
-                      markerEnd="url(#arrow)"
-                    />
-                  ))}
-                </svg>
-
-                {/* Render Core / Model Nodes */}
-                {activeModel.nodes.map((node, index) => {
-                  const isSelected = selectedNodeId === node.id;
-                  const isParent = node.type === 'parent';
-                  const isData = node.type === 'data';
-                  const isTool = node.type === 'tool';
-                  
-                  // Coordinate fallback
-                  const posX = node.x ?? (index === 0 ? 35 : index === 1 ? 290 : index === 2 ? 270 : 480);
-                  const posY = node.y ?? (index === 0 ? 155 : index === 1 ? 45 : index === 2 ? 255 : 155);
+                  // Check if there is a conflict pair in this model
+                  const conflictEscalation = escalations.find(e => e.severity === 'CONFLICT');
+                  const momentumNode = activeModel.nodes.find(n => n.id === 'node-momentum');
+                  const betaNeutralNode = activeModel.nodes.find(n => n.id === 'node-beta-neutral');
 
                   return (
-                    <div
-                      key={node.id}
-                      onClick={() => setSelectedNodeId(node.id)}
-                      style={{
-                        left: `${posX}px`,
-                        top: `${posY}px`,
-                      }}
-                      className={`absolute min-w-[135px] max-w-[165px] p-2.5 rounded-2xl border transition-all cursor-pointer z-10 flex flex-col justify-between shadow-2xs ${
-                        isSelected
-                          ? isParent
-                            ? 'bg-[#eae4ff] border-purple-500 ring-2 ring-purple-400/40'
-                            : 'bg-white border-blue-500 ring-2 ring-blue-400/40'
-                          : isParent
-                          ? 'bg-[#eae4ff] hover:bg-[#eae4ff]/90 border-purple-300'
-                          : isData
-                          ? 'bg-white hover:bg-slate-50 border-slate-300'
-                          : isTool
-                          ? 'bg-white hover:bg-slate-50 border-slate-300'
-                          : 'bg-white hover:bg-slate-50 border-slate-300'
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[8.5px] font-mono uppercase tracking-wider font-bold ${
-                            isParent 
-                              ? 'text-purple-700' 
-                              : isData 
-                              ? 'text-emerald-700' 
-                              : isTool
-                              ? 'text-amber-700'
-                              : 'text-blue-600'
-                          }`}>
-                            {node.type === 'parent' ? 'parent orchestrator' : node.type === 'data' ? 'feature store' : node.type}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleManualNodeRefresh(e, node.id)}
-                            title="Anti-Hallucination Refresh countdown"
-                            className="flex items-center gap-0.5 px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8px] font-mono font-bold hover:bg-slate-200"
-                          >
-                            <RotateCw className={`w-2.5 h-2.5 ${refreshingNodeId === node.id ? 'animate-spin text-blue-600' : ''}`} />
-                            <span>{nodeCountdowns[node.id] || 28}s</span>
-                          </button>
-                        </div>
-                        <span className="text-[10.5px] font-bold text-slate-900 font-mono leading-tight block truncate">
-                          {node.name}
-                        </span>
-                      </div>
-                      <div className="text-[8px] font-mono text-muted-foreground border-t border-black/5 pt-1 flex items-center justify-between mt-1">
-                        <span>{node.latency}</span>
-                        <span className="text-emerald-600 font-semibold truncate max-w-[70px]">
-                          {node.defaultProperty ? node.defaultProperty.split(' ')[0] : 'Synced'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 min-w-[680px] min-h-[350px]">
+                      <defs>
+                        <marker
+                          id="arrow"
+                          viewBox="0 0 10 10"
+                          refX="6"
+                          refY="5"
+                          markerWidth="6"
+                          markerHeight="6"
+                          orient="auto-start-reverse"
+                        >
+                          <path d="M 0 1 L 8 5 L 0 9 z" fill="#0f172a" opacity="0.95" />
+                        </marker>
+                        <marker
+                          id="arrow-amber"
+                          viewBox="0 0 10 10"
+                          refX="6"
+                          refY="5"
+                          markerWidth="6"
+                          markerHeight="6"
+                          orient="auto-start-reverse"
+                        >
+                          <path d="M 0 1 L 8 5 L 0 9 z" fill="#f59e0b" opacity="0.95" />
+                        </marker>
+                      </defs>
 
-                {/* AI Suggestion with Complete Bullet Reasoning Box (Lower-Right of Canvas, matching screenshot) */}
-                <div className="absolute right-4 bottom-4 w-[220px] sm:w-[245px] p-2.5 rounded-2xl border border-emerald-300 bg-[#eef8f2] shadow-2xs z-20 space-y-1.5 animate-in fade-in">
-                  <div className="flex items-center gap-1.5 text-emerald-950 font-mono text-[10px] font-bold border-b border-emerald-200/80 pb-1">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                    <span>AI suggestion with complete bullet reasoning</span>
+                      {/* Node 1 (Center-Left) -> Node 2 (Top-Middle) */}
+                      <path
+                        d="M 185 185 C 225 150, 255 90, 290 75"
+                        fill="none"
+                        stroke="#0f172a"
+                        strokeWidth="1.75"
+                        markerEnd="url(#arrow)"
+                      />
+
+                      {/* Node 1 (Center-Left) -> Node 3 (Feature Store / Bottom-Middle) */}
+                      <path
+                        d="M 185 210 C 220 235, 245 265, 270 280"
+                        fill="none"
+                        stroke={blastRadiusNodeIds.has('node-cboe-vol') ? '#f59e0b' : '#0f172a'}
+                        strokeWidth="1.75"
+                        strokeDasharray={blastRadiusNodeIds.has('node-cboe-vol') ? '4,4' : undefined}
+                        markerEnd={blastRadiusNodeIds.has('node-cboe-vol') ? 'url(#arrow-amber)' : 'url(#arrow)'}
+                      />
+
+                      {/* Top-Left Inflow into Node 4 (Execution Sub-Agent) */}
+                      <path
+                        d="M 410 80 C 440 100, 460 130, 480 165"
+                        fill="none"
+                        stroke="#0f172a"
+                        strokeWidth="1.75"
+                        markerEnd="url(#arrow)"
+                      />
+
+                      {/* Node 4 Outflow to Top-Right */}
+                      <path
+                        d="M 610 165 C 630 140, 645 120, 665 100"
+                        fill="none"
+                        stroke="#0f172a"
+                        strokeWidth="1.75"
+                        markerEnd="url(#arrow)"
+                      />
+
+                      {/* Bottom-Left Inflow into Node 4 */}
+                      <path
+                        d="M 400 290 C 430 270, 455 240, 480 200"
+                        fill="none"
+                        stroke={blastRadiusNodeIds.has('node-exec-gate') ? '#f59e0b' : '#0f172a'}
+                        strokeWidth="1.75"
+                        strokeDasharray={blastRadiusNodeIds.has('node-exec-gate') ? '4,4' : undefined}
+                        markerEnd={blastRadiusNodeIds.has('node-exec-gate') ? 'url(#arrow-amber)' : 'url(#arrow)'}
+                      />
+
+                      {/* Node 4 Outflow to Bottom-Right */}
+                      <path
+                        d="M 610 200 C 630 230, 650 260, 675 285"
+                        fill="none"
+                        stroke="#0f172a"
+                        strokeWidth="1.75"
+                        markerEnd="url(#arrow)"
+                      />
+
+                      {/* Conflict Edge between Momentum Agent and Beta-Neutral Agent */}
+                      {momentumNode && betaNeutralNode && (
+                        <g className="pointer-events-auto cursor-pointer" onClick={() => conflictEscalation && setArbitrationEscalation(conflictEscalation)}>
+                          <path
+                            d={`M ${(momentumNode.x || 30) + 70} ${(momentumNode.y || 40) + 60} L ${(betaNeutralNode.x || 30) + 70} ${(betaNeutralNode.y || 230)}`}
+                            fill="none"
+                            stroke="#dc2626"
+                            strokeWidth="2"
+                            strokeDasharray="5,4"
+                          />
+                        </g>
+                      )}
+
+                      {/* Additional dynamic connection paths for added nodes */}
+                      {activeModel.nodes.length > 4 && activeModel.nodes.slice(4).map((n) => (
+                        <path
+                          key={n.id}
+                          d={`M ${n.x + 60} ${n.y + 40} C ${n.x + 90} ${n.y + 70}, 380 140, 470 120`}
+                          fill="none"
+                          stroke={blastRadiusNodeIds.has(n.id) ? '#f59e0b' : '#64748b'}
+                          strokeWidth="1.25"
+                          strokeDasharray="4,4"
+                          markerEnd={blastRadiusNodeIds.has(n.id) ? 'url(#arrow-amber)' : 'url(#arrow)'}
+                        />
+                      ))}
+                    </svg>
+                  );
+                })()}
+
+                {/* Render Core / Model Nodes */}
+                {(() => {
+                  const blastRadiusNodeIds = new Set<string>();
+                  activeModel.nodes.forEach((n) => {
+                    if (n.failure?.blastRadius) {
+                      n.failure.blastRadius.forEach((id) => blastRadiusNodeIds.add(id));
+                    }
+                  });
+
+                  return activeModel.nodes.map((node, index) => {
+                    const isSelected = selectedNodeId === node.id;
+                    const isParent = node.type === 'parent';
+                    const isData = node.type === 'data';
+                    const isTool = node.type === 'tool';
+                    const isDegraded = node.health === 'DEGRADED';
+                    const isQuarantined = node.health === 'QUARANTINED';
+                    const isBreached = node.health === 'BREACHED';
+                    const isFailing = isDegraded || isQuarantined || isBreached;
+                    const isDownstreamBlast = !isFailing && blastRadiusNodeIds.has(node.id);
+                    
+                    // Coordinate fallback
+                    const posX = node.x ?? (index === 0 ? 35 : index === 1 ? 290 : index === 2 ? 270 : 480);
+                    const posY = node.y ?? (index === 0 ? 155 : index === 1 ? 45 : index === 2 ? 255 : 155);
+
+                    return (
+                      <div
+                        key={node.id}
+                        onClick={() => setSelectedNodeId(node.id)}
+                        onMouseEnter={() => setHoveredNodeId(node.id)}
+                        onMouseLeave={() => setHoveredNodeId(null)}
+                        style={{
+                          left: `${posX}px`,
+                          top: `${posY}px`,
+                        }}
+                        className={`absolute min-w-[145px] max-w-[175px] p-2.5 rounded-2xl border transition-all cursor-pointer z-10 flex flex-col justify-between shadow-2xs ${
+                          isSelected
+                            ? isBreached
+                              ? 'bg-red-50/90 border-red-600 ring-2 ring-red-500/50'
+                              : isQuarantined
+                              ? 'bg-purple-50/90 border-purple-600 ring-2 ring-purple-500/50'
+                              : isDegraded
+                              ? 'bg-amber-50/90 border-amber-500 ring-2 ring-amber-500/50'
+                              : isParent
+                              ? 'bg-[#eae4ff] border-purple-500 ring-2 ring-purple-400/40'
+                              : 'bg-white border-blue-500 ring-2 ring-blue-400/40'
+                            : isBreached
+                            ? 'bg-red-50/60 hover:bg-red-50 border-red-500 ring-1 ring-red-300'
+                            : isQuarantined
+                            ? 'bg-purple-50/60 hover:bg-purple-50 border-purple-500 ring-1 ring-purple-300'
+                            : isDegraded
+                            ? 'bg-amber-50/60 hover:bg-amber-50 border-amber-500 ring-1 ring-amber-300'
+                            : isDownstreamBlast
+                            ? 'bg-amber-50/30 hover:bg-amber-50/50 border-dashed border-amber-400'
+                            : isParent
+                            ? 'bg-[#eae4ff] hover:bg-[#eae4ff]/90 border-purple-300'
+                            : isData
+                            ? 'bg-white hover:bg-slate-50 border-slate-300'
+                            : isTool
+                            ? 'bg-white hover:bg-slate-50 border-slate-300'
+                            : 'bg-white hover:bg-slate-50 border-slate-300'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`text-[8.5px] font-mono uppercase tracking-wider font-bold ${
+                              isBreached
+                                ? 'text-red-700'
+                                : isQuarantined
+                                ? 'text-purple-700'
+                                : isDegraded
+                                ? 'text-amber-700'
+                                : isParent 
+                                ? 'text-purple-700' 
+                                : isData 
+                                ? 'text-emerald-700' 
+                                : isTool
+                                ? 'text-amber-700'
+                                : 'text-blue-600'
+                            }`}>
+                              {node.health && node.health !== 'HEALTHY' 
+                                ? `[${node.health}]` 
+                                : node.type === 'parent' 
+                                ? 'parent orchestrator' 
+                                : node.type === 'data' 
+                                ? 'feature store' 
+                                : node.type}
+                            </span>
+
+                            {/* Status indicator / Refresh / Re-ground */}
+                            {isFailing ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  regroundNode(node.id);
+                                }}
+                                title="Click to re-ground node data source"
+                                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-white text-slate-800 border border-slate-300 text-[8px] font-mono font-bold hover:bg-slate-100 shadow-2xs"
+                              >
+                                <RotateCw className="w-2.5 h-2.5 text-blue-600" />
+                                <span>Re-ground</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => handleManualNodeRefresh(e, node.id)}
+                                title="Anti-Hallucination Refresh countdown"
+                                className="flex items-center gap-0.5 px-1 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[8px] font-mono font-bold hover:bg-slate-200"
+                              >
+                                <RotateCw className={`w-2.5 h-2.5 ${refreshingNodeId === node.id ? 'animate-spin text-blue-600' : ''}`} />
+                                <span>{nodeCountdowns[node.id] || 28}s</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <span className="text-[10.5px] font-bold text-slate-900 font-mono leading-tight block truncate">
+                            {node.name}
+                          </span>
+
+                          {/* Failure badge / Downstream warning chip */}
+                          {isDownstreamBlast && (
+                            <div className="flex items-center gap-1 text-[8px] font-mono text-amber-700 bg-amber-100/70 px-1 py-0.2 rounded border border-amber-200">
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                              <span>unverified input</span>
+                            </div>
+                          )}
+
+                          {node.failure && (
+                            <div className="text-[7.5px] font-mono text-slate-700 bg-black/5 px-1 py-0.5 rounded truncate leading-none">
+                              {node.failure.detail}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="text-[8px] font-mono text-muted-foreground border-t border-black/5 pt-1 flex items-center justify-between mt-1">
+                          <span>{node.latency}</span>
+                          <span className={`font-semibold truncate max-w-[75px] ${
+                            isBreached 
+                              ? 'text-red-700' 
+                              : isQuarantined 
+                              ? 'text-purple-700' 
+                              : isDegraded 
+                              ? 'text-amber-700' 
+                              : 'text-emerald-600'
+                          }`}>
+                            {node.permissionLevel || (node.defaultProperty ? node.defaultProperty.split(' ')[0] : 'Synced')}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+
+                {/* Conflict Edge Arbitration Badge floating if conflict exists */}
+                {escalations.some(e => e.severity === 'CONFLICT') && (
+                  <div className="absolute left-[90px] top-[140px] z-20">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const conflict = escalations.find(e => e.severity === 'CONFLICT');
+                        if (conflict) setArbitrationEscalation(conflict);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-100 text-red-900 border border-red-300 font-mono text-[9px] font-bold shadow-2xs hover:bg-red-200 transition-all cursor-pointer"
+                      title="Arbitrate contradictory agent instructions"
+                    >
+                      <Scale className="w-3 h-3 text-red-700" />
+                      <span>⚖️ Conflict: NVDA</span>
+                    </button>
                   </div>
-                  <ul className="text-[9.5px] font-sans text-emerald-950 space-y-1 leading-snug">
-                    <li className="flex items-start gap-1">
-                      <span className="text-emerald-700 font-bold">•</span>
-                      <span>Factor skew indicates vol compression into FOMC; calibrate delta overlays.</span>
-                    </li>
-                    <li className="flex items-start gap-1">
-                      <span className="text-emerald-700 font-bold">•</span>
-                      <span>Maintain Barra beta neutrality (&lt;0.01) while scaling tech momentum.</span>
-                    </li>
-                    <li className="flex items-start gap-1">
-                      <span className="text-emerald-700 font-bold">•</span>
-                      <span>Pre-trade collar hedge staged to prevent single-sector limit breaches.</span>
-                    </li>
-                  </ul>
+                )}
+
+                {/* AI Workflow Suggestion (Button when collapsed, detailed panel when expanded) */}
+                <div className="absolute right-4 bottom-4 z-20">
+                  {!isAiSuggestionExpanded ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsAiSuggestionExpanded(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50/95 hover:bg-blue-100 text-blue-900 shadow-2xs font-mono text-[11px] font-bold transition-all cursor-pointer group animate-in fade-in"
+                      title="Click to view AI workflow suggestions"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600 group-hover:scale-110 transition-transform" />
+                      <span>AI Workflow Suggestion</span>
+                    </button>
+                  ) : (
+                    <div className="w-[240px] sm:w-[265px] p-3 rounded-2xl border border-blue-200 bg-[#f0f7ff] shadow-md space-y-2 animate-in fade-in zoom-in-95">
+                      <div className="flex items-center justify-between text-blue-950 font-mono text-[10.5px] font-bold border-b border-blue-200/80 pb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                          <span>AI Workflow Suggestion</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsAiSuggestionExpanded(false)}
+                          className="text-[9px] font-mono text-blue-600 hover:text-blue-800 hover:bg-blue-100/70 px-1.5 py-0.5 rounded transition-colors"
+                        >
+                          Collapse
+                        </button>
+                      </div>
+                      <ul className="text-[9.5px] font-sans text-blue-950 space-y-1.5 leading-snug">
+                        <li className="flex items-start gap-1">
+                          <span className="text-blue-600 font-bold">•</span>
+                          <span>Factor skew indicates vol compression into FOMC; calibrate delta overlays.</span>
+                        </li>
+                        <li className="flex items-start gap-1">
+                          <span className="text-blue-600 font-bold">•</span>
+                          <span>Maintain Barra beta neutrality (&lt;0.01) while scaling tech momentum.</span>
+                        </li>
+                        <li className="flex items-start gap-1">
+                          <span className="text-blue-600 font-bold">•</span>
+                          <span>Pre-trade collar hedge staged to prevent single-sector limit breaches.</span>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -1651,55 +1800,433 @@ class VolSkewAgent(QuantParentAgent):
             {viewMode === 'matrix' && (
               <div className="w-full flex-1 min-h-[260px] rounded-xl border border-border bg-white p-3 overflow-y-auto font-mono text-xs space-y-2">
                 <div className="flex items-center justify-between pb-1 border-b border-border">
-                  <span className="font-bold text-foreground">Cross-Agent Factor Covariance Matrix</span>
-                  <span className="text-[10px] text-muted-foreground">Barra Multi-Asset Model</span>
+                  <div className="flex items-center gap-2">
+                    <Grid3X3 className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-foreground">Cross-Agent Factor Covariance Matrix</span>
+                    <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-800 border-emerald-300">
+                      {matrixFactors.length} Factors Active
+                    </Badge>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">Barra Multi-Asset Model · Equinix NY4</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-center border-collapse text-[10px]">
                     <thead>
                       <tr className="border-b border-border bg-slate-50">
-                        <th className="p-1.5 text-left">Agent Node</th>
-                        <th className="p-1.5">Alpha Beta</th>
-                        <th className="p-1.5">Momentum</th>
-                        <th className="p-1.5">Vol Sensitivity</th>
-                        <th className="p-1.5">Corr (NY4)</th>
+                        <th className="p-1.5 text-left font-bold text-slate-700">Factor / Stream Name</th>
+                        <th className="p-1.5 font-bold text-slate-700">Alpha Beta</th>
+                        <th className="p-1.5 font-bold text-slate-700">Momentum</th>
+                        <th className="p-1.5 font-bold text-slate-700">Vol Sensitivity</th>
+                        <th className="p-1.5 font-bold text-slate-700">Corr (NY4)</th>
+                        <th className="p-1.5 font-bold text-slate-700 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      <tr>
-                        <td className="p-1.5 text-left font-semibold text-foreground">Research Judgement</td>
-                        <td className="p-1.5 text-blue-600 font-bold">1.00</td>
-                        <td className="p-1.5">0.42</td>
-                        <td className="p-1.5 text-emerald-700">0.12</td>
-                        <td className="p-1.5">0.88</td>
-                      </tr>
-                      <tr>
-                        <td className="p-1.5 text-left font-semibold text-foreground">Market Trend Referral</td>
-                        <td className="p-1.5">0.42</td>
-                        <td className="p-1.5 text-blue-600 font-bold">1.00</td>
-                        <td className="p-1.5">0.68</td>
-                        <td className="p-1.5">0.94</td>
-                      </tr>
-                      <tr>
-                        <td className="p-1.5 text-left font-semibold text-foreground">Data &amp; Factor Store</td>
-                        <td className="p-1.5 text-emerald-700">0.12</td>
-                        <td className="p-1.5">0.68</td>
-                        <td className="p-1.5 text-blue-600 font-bold">1.00</td>
-                        <td className="p-1.5">0.99</td>
-                      </tr>
+                      {matrixFactors.map((factor) => (
+                        <tr key={factor.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-1.5 text-left font-semibold text-foreground flex items-center gap-1.5">
+                            <span>{factor.name}</span>
+                            {factor.isCustom && (
+                              <span className="px-1 py-0.2 rounded text-[8px] bg-blue-100 text-blue-800 font-bold border border-blue-200">
+                                Repository
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-1.5 text-blue-600 font-bold">{factor.alphaBeta}</td>
+                          <td className="p-1.5">{factor.momentum}</td>
+                          <td className="p-1.5 text-emerald-700">{factor.volSensitivity}</td>
+                          <td className="p-1.5 font-semibold text-slate-800">{factor.corrNY4}</td>
+                          <td className="p-1.5 text-right">
+                            {factor.isCustom ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMatrixFactor(factor.id)}
+                                className="text-[9px] text-red-500 hover:text-red-700 hover:bg-red-50 px-1 py-0.5 rounded transition-colors"
+                                title="Remove factor from covariance matrix"
+                              >
+                                Remove
+                              </button>
+                            ) : (
+                              <span className="text-[9px] text-muted-foreground">Core</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
+
+                <div className="pt-2 border-t border-border/80 flex items-center justify-between text-[9px] text-muted-foreground">
+                  <span>Streamed from Barra Multiple-Horizon Risk Model &amp; NY4 Optical Feeds</span>
+                  <span className="text-blue-600 font-semibold">Tip: Add more factors directly from the Repository tray below</span>
+                </div>
+              </div>
+            )}
+
+            {/* Governance & Escalation Hub view mode */}
+            {viewMode === 'governance' && (
+              <div className="w-full flex-1 min-h-[300px] rounded-xl border border-border bg-slate-50/50 p-3 overflow-y-auto font-mono text-xs space-y-4">
+                
+                {/* Top Governance & Autonomy Summary Header */}
+                <div className="p-3 rounded-xl border border-border bg-white shadow-2xs space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300">
+                        <ShieldAlert className="w-4 h-4 text-amber-700" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-foreground">Human-in-the-Loop Governance &amp; Escalations Hub</h3>
+                        <p className="text-[11px] font-sans text-muted-foreground">
+                          Autonomous execution boundaries, pair conflict arbitration, telemetry failure step-downs, and human sign-off gates.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px] bg-slate-50 border-border">
+                        Model: {activeModel.name} ({activeModel.version})
+                      </Badge>
+                      <Badge className={`text-[10px] ${pendingEscalations.length > 0 ? 'bg-amber-600 text-white animate-pulse' : 'bg-emerald-600 text-white'}`}>
+                        {pendingEscalations.length} Action{pendingEscalations.length === 1 ? '' : 's'} Required
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Autonomy breakdown grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                    <div className="p-2 rounded-lg bg-emerald-50/70 border border-emerald-200">
+                      <div className="flex items-center justify-between text-[10px] text-emerald-800 font-semibold">
+                        <span>Healthy / Grounded</span>
+                        <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      </div>
+                      <div className="text-base font-bold text-emerald-950 mt-0.5">{healthyCount} Nodes</div>
+                      <span className="text-[9.5px] text-emerald-700 font-sans">Full Autonomous Execution</span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-amber-50/70 border border-amber-200">
+                      <div className="flex items-center justify-between text-[10px] text-amber-800 font-semibold">
+                        <span>Degraded Feeds</span>
+                        <Activity className="w-3.5 h-3.5 text-amber-600" />
+                      </div>
+                      <div className="text-base font-bold text-amber-950 mt-0.5">{degradedCount} Nodes</div>
+                      <span className="text-[9.5px] text-amber-700 font-sans">Stepped Down to Human Review</span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-purple-50/70 border border-purple-200">
+                      <div className="flex items-center justify-between text-[10px] text-purple-800 font-semibold">
+                        <span>Quarantined / Drift</span>
+                        <Lock className="w-3.5 h-3.5 text-purple-600" />
+                      </div>
+                      <div className="text-base font-bold text-purple-950 mt-0.5">{quarantinedCount} Nodes</div>
+                      <span className="text-[9.5px] text-purple-700 font-sans">Signals Isolated (Observe Only)</span>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-rose-50/70 border border-rose-200">
+                      <div className="flex items-center justify-between text-[10px] text-rose-800 font-semibold">
+                        <span>Circuit Breakers</span>
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
+                      </div>
+                      <div className="text-base font-bold text-rose-950 mt-0.5">{breachedCount} Nodes</div>
+                      <span className="text-[9.5px] text-rose-700 font-sans">VaR Limit / Emergency Freeze</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 1: Awaiting Your Decision (Pending Escalations Queue) */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                      <h4 className="font-bold text-xs text-foreground uppercase tracking-wide">
+                        Awaiting Your Decision ({pendingEscalations.length})
+                      </h4>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      SEC 15c3-5 Pre-Trade Risk &amp; Autonomous Governance Standard
+                    </span>
+                  </div>
+
+                  {pendingEscalations.length === 0 ? (
+                    <div className="p-5 rounded-xl border border-emerald-200 bg-emerald-50/40 text-center space-y-2">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto border border-emerald-300">
+                        <Check className="w-4 h-4" />
+                      </div>
+                      <p className="font-bold text-xs text-emerald-950">
+                        All Agent Nodes are Currently Grounded &amp; Compliant
+                      </p>
+                      <p className="text-[11px] font-sans text-emerald-800 max-w-md mx-auto">
+                        No active circuit breaker trips, feed stalls, or conflicting trade signals require human intervention.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={triggerLiveDegradationDemo}
+                        disabled={isDemoRunning}
+                        className="mt-1 px-3 py-1 rounded-lg text-xs font-mono font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-all shadow-2xs inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Zap className="w-3 h-3 text-amber-600" />
+                        <span>Simulate Live Degradation Incident</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      {pendingEscalations.map((item) => (
+                        <EscalationCard
+                          key={item.id}
+                          escalation={item}
+                          onActionCommit={handleEscalationAction}
+                          onNavigateToNode={(nodeId: string) => {
+                            setSelectedNodeId(nodeId);
+                            setViewMode('Node');
+                            setRightTab('health');
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: Pair Conflict Arbitration Deep Dive */}
+                <div className="p-3.5 rounded-xl border border-border bg-white shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <div className="flex items-center gap-2">
+                      <Scale className="w-4 h-4 text-blue-600" />
+                      <h4 className="font-bold text-xs text-foreground">Cross-Agent Conflict Arbitration Console</h4>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">Arbitration Policy: Sharpe-Risk Pareto Frontier</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Agent A: Momentum */}
+                    <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/40 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-blue-900">Agent Alpha: Momentum Arb</span>
+                        <Badge className="bg-blue-600 text-white text-[9px]">LONG NVDA $14M</Badge>
+                      </div>
+                      <p className="text-[10.5px] text-blue-950 leading-relaxed font-sans">
+                        Detected 15-minute lead-lag tick imbalance following TSMC supply chain revision. Forecasts +120 bps alpha over 4-hour horizon.
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono pt-1">
+                        <div className="p-1.5 rounded bg-white border border-blue-200">
+                          <span className="text-muted-foreground block text-[9px]">Sharpe Delta</span>
+                          <span className="font-bold text-emerald-700">+0.22</span>
+                        </div>
+                        <div className="p-1.5 rounded bg-white border border-blue-200">
+                          <span className="text-muted-foreground block text-[9px]">Confidence</span>
+                          <span className="font-bold text-blue-800">89%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Agent B: Beta Neutral */}
+                    <div className="p-3 rounded-xl border border-purple-200 bg-purple-50/40 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-purple-900">Agent Risk: Beta-Neutral Overlay</span>
+                        <Badge className="bg-purple-600 text-white text-[9px]">SHORT NVDA $10M</Badge>
+                      </div>
+                      <p className="text-[10.5px] text-purple-950 leading-relaxed font-sans">
+                        Barra multi-factor beta model flags semiconductor sector concentration approaching hard portfolio VaR ceiling (1.25%).
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono pt-1">
+                        <div className="p-1.5 rounded bg-white border border-purple-200">
+                          <span className="text-muted-foreground block text-[9px]">VaR Impact</span>
+                          <span className="font-bold text-purple-700">-0.18% (Safe)</span>
+                        </div>
+                        <div className="p-1.5 rounded bg-white border border-purple-200">
+                          <span className="text-muted-foreground block text-[9px]">Confidence</span>
+                          <span className="font-bold text-purple-800">92%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Human Arbitration Controls */}
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-slate-800">Arbitration Decision Choice:</span>
+                      {isArbitrationCommitted && (
+                        <span className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Decision Committed &amp; OMS Orders Synced
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setArbitrationChoice('split')}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          arbitrationChoice === 'split'
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-2xs font-bold'
+                            : 'bg-white text-slate-800 border-border hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-[11px]">50/50 Compromise</span>
+                        <span className={`block text-[9px] font-sans ${arbitrationChoice === 'split' ? 'text-blue-100' : 'text-muted-foreground'}`}>
+                          Long $7M NVDA with partial collar
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setArbitrationChoice('momentum')}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          arbitrationChoice === 'momentum'
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-2xs font-bold'
+                            : 'bg-white text-slate-800 border-border hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-[11px]">Prioritize Alpha</span>
+                        <span className={`block text-[9px] font-sans ${arbitrationChoice === 'momentum' ? 'text-blue-100' : 'text-muted-foreground'}`}>
+                          Execute full +$14M momentum signal
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setArbitrationChoice('beta_neutral')}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          arbitrationChoice === 'beta_neutral'
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-2xs font-bold'
+                            : 'bg-white text-slate-800 border-border hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-[11px]">Prioritize Risk</span>
+                        <span className={`block text-[9px] font-sans ${arbitrationChoice === 'beta_neutral' ? 'text-blue-100' : 'text-muted-foreground'}`}>
+                          Enforce strict beta neutralization
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setArbitrationChoice('freeze')}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          arbitrationChoice === 'freeze'
+                            ? 'bg-rose-600 text-white border-rose-700 shadow-2xs font-bold'
+                            : 'bg-white text-slate-800 border-border hover:bg-slate-100'
+                        }`}
+                      >
+                        <span className="block text-[11px]">Freeze Both</span>
+                        <span className={`block text-[9px] font-sans ${arbitrationChoice === 'freeze' ? 'text-rose-100' : 'text-muted-foreground'}`}>
+                          Block NVDA trades until re-anchored
+                        </span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <input
+                        type="text"
+                        placeholder="Add optional portfolio manager rationale notes for compliance log..."
+                        value={arbitrationCustomNotes}
+                        onChange={(e) => setArbitrationCustomNotes(e.target.value)}
+                        className="text-[11px] font-mono px-2.5 py-1 rounded-lg border border-border bg-white text-foreground flex-1 mr-2 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setIsArbitrationCommitted(true);
+                          handleEscalationAction(
+                            arbitrationChoice === 'split' ? 'SPLIT_ALLOCATION' : arbitrationChoice === 'momentum' ? 'EXECUTE_ALPHA' : arbitrationChoice === 'beta_neutral' ? 'NEUTRALIZE_RISK' : 'FREEZE_NODES',
+                            'esc-pair-conflict-1',
+                            arbitrationCustomNotes || `Arbitrated with choice: ${arbitrationChoice}`
+                          );
+                          setTimeout(() => setIsArbitrationCommitted(false), 3000);
+                        }}
+                        className="h-7 text-xs font-mono bg-blue-600 hover:bg-blue-700 text-white px-3 shrink-0"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5 mr-1" />
+                        <span>Commit Decision</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Active Node Autonomy & Permissions Grid */}
+                <div className="p-3.5 rounded-xl border border-border bg-white shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between border-b border-border pb-2">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-blue-600" />
+                      <h4 className="font-bold text-xs text-foreground">Node Autonomy &amp; Permission Registry ({activeModel.name})</h4>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">{activeModel.nodes.length} Nodes Registered</span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className="border-b border-border bg-slate-50 font-semibold text-slate-700">
+                          <th className="p-2">Node Name</th>
+                          <th className="p-2">Role</th>
+                          <th className="p-2">Health</th>
+                          <th className="p-2">Confidence</th>
+                          <th className="p-2">Permission Level</th>
+                          <th className="p-2 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {activeModel.nodes.map((node) => (
+                          <tr key={node.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="p-2 font-bold text-foreground">
+                              <div className="flex items-center gap-1.5">
+                                <Bot className="w-3.5 h-3.5 text-blue-600" />
+                                <span>{node.name}</span>
+                              </div>
+                            </td>
+                            <td className="p-2 text-muted-foreground">{node.role || node.type}</td>
+                            <td className="p-2">
+                              <Badge className={`text-[9px] ${
+                                node.health === 'BREACHED' ? 'bg-red-600 text-white' :
+                                node.health === 'QUARANTINED' ? 'bg-purple-600 text-white' :
+                                node.health === 'DEGRADED' ? 'bg-amber-600 text-white' :
+                                'bg-emerald-600 text-white'
+                              }`}>
+                                {node.health || 'HEALTHY'}
+                              </Badge>
+                            </td>
+                            <td className="p-2 font-mono font-bold">
+                              {((node.confidence ?? 0.94) * 100).toFixed(0)}%
+                            </td>
+                            <td className="p-2">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                node.permissionLevel === 'Observe' ? 'bg-purple-100 text-purple-900 border border-purple-200' :
+                                node.permissionLevel === 'Propose' || node.permissionLevel === 'Act with approval' ? 'bg-amber-100 text-amber-900 border border-amber-200' :
+                                'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                              }`}>
+                                {node.permissionLevel || 'Autonomous'}
+                              </span>
+                            </td>
+                            <td className="p-2 text-right space-x-1">
+                              <button
+                                type="button"
+                                onClick={() => regroundNode(node.id)}
+                                className="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 font-semibold transition-all cursor-pointer"
+                              >
+                                Re-ground
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => restoreAutonomy(node.id)}
+                                className="px-2 py-0.5 rounded text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-semibold transition-all cursor-pointer"
+                              >
+                                Restore
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
               </div>
             )}
           </div>
 
           {/* =========================================================================
-              BOTTOM EXTENDABLE & SCROLLABLE ENTERPRISE RESOURCES & FIRM IDEAS PANEL
-              - Collapsed (compact 4-column quick tray) OR Expanded (rich scrollable library)
+              BOTTOM EXTENDABLE & SCROLLABLE ENTERPRISE RESOURCES & FIRM IDEAS REPOSITORY
+              - Collapsed (compact 4-column quick tray) OR Expanded (rich scrollable repository)
               - Categories: All, Skills & Subagents, Code & Templates, Input Nodes, Risk & Compliance, Firm Ideas, Research Papers
-              - Drag-and-drop onto canvas OR 1-click instantiate
-              - Search and filter across institutional library
+              - Drag-and-drop onto canvas OR Add to Node / Matrix / Code
+              - Search and filter across institutional repository
              ========================================================================= */}
           <div 
             id="enterprise-resources-panel"
@@ -1714,8 +2241,8 @@ class VolSkewAgent(QuantParentAgent):
               {/* Left: Title + Expand Button */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-foreground">
-                  <Library className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Enterprise Resources &amp; Ideas Library</span>
+                  <Database className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Enterprise Resources &amp; Ideas Repository</span>
                   <Badge variant="outline" className="text-[9px] font-mono bg-white text-muted-foreground ml-1">
                     {filteredEnterpriseResources.length} items
                   </Badge>
@@ -1778,7 +2305,7 @@ class VolSkewAgent(QuantParentAgent):
                     <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                     <Input
                       type="text"
-                      placeholder="Filter resources..."
+                      placeholder="Filter repository..."
                       value={resourceSearchQuery}
                       onChange={(e) => setResourceSearchQuery(e.target.value)}
                       className="h-6 text-[10px] pl-6 py-0 font-mono bg-white border-border"
@@ -1804,7 +2331,7 @@ class VolSkewAgent(QuantParentAgent):
                   <CheckCircle className="w-3 h-3 text-emerald-600 shrink-0" />
                   {resourceNotification}
                 </span>
-                <span className="text-[9px] text-emerald-700">Drag to re-order on canvas</span>
+                <span className="text-[9px] text-emerald-700">Live synchronized with active model</span>
               </div>
             )}
 
@@ -1813,7 +2340,7 @@ class VolSkewAgent(QuantParentAgent):
               {filteredEnterpriseResources.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center p-4 text-muted-foreground text-xs">
                   <HelpCircle className="w-5 h-5 mb-1 text-slate-400" />
-                  <span>No institutional resources matching "{resourceSearchQuery}"</span>
+                  <span>No institutional repository items matching "{resourceSearchQuery}"</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -1880,9 +2407,9 @@ class VolSkewAgent(QuantParentAgent):
                         )}
                       </div>
 
-                      {/* Action buttons footer */}
+                      {/* Action buttons footer with Add to Node / Matrix / Code options */}
                       <div className="pt-1.5 mt-1 border-t border-black/5 flex items-center justify-between gap-1">
-                        <span className="text-[8px] text-slate-500">
+                        <span className="text-[8px] text-slate-500 font-mono">
                           {item.latency}
                         </span>
 
@@ -1894,7 +2421,7 @@ class VolSkewAgent(QuantParentAgent):
                                 e.stopPropagation();
                                 handleCreateModelFromIdea(item);
                               }}
-                              className="px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-0.5 shadow-2xs"
+                              className="px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-0.5 shadow-2xs cursor-pointer"
                               title="Create entire model from this idea"
                             >
                               <Sparkles className="w-2.5 h-2.5" />
@@ -1902,18 +2429,101 @@ class VolSkewAgent(QuantParentAgent):
                             </button>
                           ) : null}
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleAddResourceToModel(item);
-                            }}
-                            className="px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 flex items-center gap-0.5 shadow-2xs"
-                            title="Add node to current model"
-                          >
-                            <Plus className="w-2.5 h-2.5 text-blue-600" />
-                            <span>Add Node</span>
-                          </button>
+                          {/* Dedicated Dropdown / Action Menu for Node / Matrix / Code */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveResourceActionMenu(activeResourceActionMenu === item.id ? null : item.id);
+                              }}
+                              className="px-1.5 py-0.5 text-[8.5px] font-bold rounded bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 flex items-center gap-1 shadow-2xs cursor-pointer"
+                              title="Add to Node, Matrix, or Code"
+                            >
+                              <Plus className="w-2.5 h-2.5 text-blue-600" />
+                              <span>Add to...</span>
+                              <ChevronDown className="w-2 h-2 text-slate-500" />
+                            </button>
+
+                            {activeResourceActionMenu === item.id && (
+                              <div 
+                                className="absolute right-0 bottom-full mb-1 w-44 bg-white border border-border rounded-xl shadow-lg z-50 p-1 font-mono text-[10px] space-y-0.5 animate-in fade-in"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="px-2 py-1 text-[9px] font-bold text-muted-foreground border-b border-border/80 flex items-center justify-between">
+                                  <span>Add to Target:</span>
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setActiveResourceActionMenu(null)}
+                                    className="text-slate-400 hover:text-slate-700"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleAddResourceToNode(item, 'new');
+                                    setActiveResourceActionMenu(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1 rounded-lg hover:bg-blue-50 text-blue-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  <Layers className="w-3 h-3 text-blue-600 shrink-0" />
+                                  <div>
+                                    <span className="font-bold block">DAG Node</span>
+                                    <span className="text-[8px] text-muted-foreground block">Add as node in active model</span>
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleAddResourceToNode(item, 'append');
+                                    setActiveResourceActionMenu(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1 rounded-lg hover:bg-indigo-50 text-indigo-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  <Bot className="w-3 h-3 text-indigo-600 shrink-0" />
+                                  <div>
+                                    <span className="font-bold block">Attach to Selected Node</span>
+                                    <span className="text-[8px] text-muted-foreground block">Attach to {selectedNode.name.slice(0, 14)}...</span>
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleAddResourceToMatrix(item);
+                                    setActiveResourceActionMenu(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1 rounded-lg hover:bg-emerald-50 text-emerald-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  <Grid3X3 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  <div>
+                                    <span className="font-bold block">Factor Matrix</span>
+                                    <span className="text-[8px] text-muted-foreground block">Stream into covariance matrix</span>
+                                  </div>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleAddResourceToCode(item);
+                                    setActiveResourceActionMenu(null);
+                                  }}
+                                  className="w-full text-left px-2 py-1 rounded-lg hover:bg-amber-50 text-amber-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                >
+                                  <Code2 className="w-3 h-3 text-amber-600 shrink-0" />
+                                  <div>
+                                    <span className="font-bold block">Python Code</span>
+                                    <span className="text-[8px] text-muted-foreground block">Insert snippet into code editor</span>
+                                  </div>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
                         </div>
                       </div>
 
@@ -1927,7 +2537,7 @@ class VolSkewAgent(QuantParentAgent):
             <div className="px-2.5 py-1 bg-slate-100/70 border-t border-border/80 text-[9px] font-mono text-slate-600 flex items-center justify-between shrink-0">
               <span className="flex items-center gap-1">
                 <Move className="w-2.5 h-2.5 text-slate-500" />
-                <span>Tip: Drag any enterprise resource directly onto the DAG canvas to wire into active model</span>
+                <span>Tip: Drag any item onto canvas, or use "Add to..." to wire into Node, Matrix, or Code</span>
               </span>
               <span className="text-slate-500 font-semibold">
                 Active: {activeModel.name} ({activeModel.nodes.length} nodes)
@@ -1949,7 +2559,7 @@ class VolSkewAgent(QuantParentAgent):
         <div className="lg:col-span-4 p-3.5 flex flex-col justify-between bg-[#f3f3f3] min-h-0 overflow-hidden">
           <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
             
-            {/* Top Tabs matching sketch: [ Agent | Instructions | Code ] */}
+            {/* Top Tabs matching sketch: [ Agent | Instructions | Code | Health ] + Sandbox */}
             <div className="flex items-center justify-between pb-2 border-b border-border/80 mb-2.5 shrink-0">
               <div className="flex items-center gap-1 font-mono text-xs overflow-x-auto py-0.5">
                 <button
@@ -1984,6 +2594,44 @@ class VolSkewAgent(QuantParentAgent):
                   }`}
                 >
                   Code
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightTab('health')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
+                    rightTab === 'health'
+                      ? selectedNode.health && selectedNode.health !== 'HEALTHY'
+                        ? 'bg-amber-100 text-amber-900 font-bold border border-amber-300 shadow-2xs'
+                        : 'bg-blue-100 text-blue-900 font-bold border border-blue-300 shadow-2xs'
+                      : selectedNode.health && selectedNode.health !== 'HEALTHY'
+                      ? 'text-amber-700 hover:text-amber-900 font-bold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Activity className="w-3 h-3" />
+                  <span>Health</span>
+                  {selectedNode.health && selectedNode.health !== 'HEALTHY' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRightTab('escalations')}
+                  className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
+                    rightTab === 'escalations'
+                      ? 'bg-amber-100 text-amber-900 font-bold border border-amber-300 shadow-2xs'
+                      : pendingEscalations.length > 0
+                      ? 'text-amber-700 hover:text-amber-900 font-bold'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <ShieldAlert className="w-3 h-3 text-amber-600" />
+                  <span>Decisions</span>
+                  {pendingEscalations.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[9px] font-mono leading-none">
+                      {pendingEscalations.length}
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -2052,6 +2700,250 @@ class VolSkewAgent(QuantParentAgent):
                       </span>
                     ))}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT: HEALTH (Failure & Degradation Inspector) */}
+            {rightTab === 'health' && (
+              <div className="flex-1 min-h-0 overflow-y-auto font-mono text-xs space-y-3 pr-0.5">
+                
+                {/* Health Status Banner */}
+                <div className={`p-3 rounded-xl border ${
+                  selectedNode.health === 'BREACHED'
+                    ? 'bg-red-50 border-red-300 text-red-950'
+                    : selectedNode.health === 'QUARANTINED'
+                    ? 'bg-purple-50 border-purple-300 text-purple-950'
+                    : selectedNode.health === 'DEGRADED'
+                    ? 'bg-amber-50 border-amber-300 text-amber-950'
+                    : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                }`}>
+                  <div className="flex items-center justify-between pb-1.5 border-b border-black/10">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Activity className="w-3.5 h-3.5" />
+                      <span>Health State:</span>
+                    </div>
+                    <Badge className={`text-[10px] font-bold ${
+                      selectedNode.health === 'BREACHED'
+                        ? 'bg-red-600 text-white'
+                        : selectedNode.health === 'QUARANTINED'
+                        ? 'bg-purple-600 text-white'
+                        : selectedNode.health === 'DEGRADED'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-emerald-600 text-white'
+                    }`}>
+                      {selectedNode.health || 'HEALTHY'}
+                    </Badge>
+                  </div>
+                  
+                  {selectedNode.failure ? (
+                    <div className="mt-2 space-y-1">
+                      <div className="text-[11px] font-bold text-slate-900">
+                        {selectedNode.failure.kind.replace(/_/g, ' ')}
+                      </div>
+                      <p className="text-[10.5px] leading-relaxed opacity-90">
+                        {selectedNode.failure.detail}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[10.5px] opacity-90">
+                      All live telemetry feeds and internal invariant checks passing. No degradation detected.
+                    </p>
+                  )}
+                </div>
+
+                {/* Confidence & Grounding Metrics */}
+                <div className="p-2.5 rounded-xl border border-border bg-white space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-muted-foreground font-semibold">Model Confidence</span>
+                    <span className={`font-bold ${
+                      (selectedNode.confidence ?? 0.9) < 0.70 ? 'text-amber-600' : 'text-emerald-700'
+                    }`}>
+                      {((selectedNode.confidence ?? 0.94) * 100).toFixed(0)}% (Floor: 70%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                    <div 
+                      className={`h-full transition-all ${
+                        (selectedNode.confidence ?? 0.9) < 0.70 ? 'bg-amber-500' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(100, (selectedNode.confidence ?? 0.94) * 100)}%` }}
+                    />
+                  </div>
+
+                  <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Last Grounded</span>
+                    <span className="font-semibold text-slate-800">
+                      {selectedNode.lastGroundedAt 
+                        ? `${Math.max(1, Math.floor((Date.now() - new Date(selectedNode.lastGroundedAt).getTime()) / 60000))}m ago` 
+                        : 'Just now'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Autonomy Level & Step-down Reasoning */}
+                <div className="p-2.5 rounded-xl border border-border bg-white space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-muted-foreground font-semibold">Autonomy Level</span>
+                    <span className={`font-bold px-2 py-0.5 rounded-md text-[10px] ${
+                      selectedNode.permissionLevel === 'Observe'
+                        ? 'bg-purple-100 text-purple-900 border border-purple-200'
+                        : selectedNode.permissionLevel === 'Propose' || selectedNode.permissionLevel === 'Act with approval'
+                        ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                        : 'bg-emerald-100 text-emerald-900 border border-emerald-200'
+                    }`}>
+                      {selectedNode.permissionLevel || 'Autonomous'}
+                    </span>
+                  </div>
+
+                  {selectedNode.failure?.autonomyBefore && (
+                    <div className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-[10px] space-y-1">
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span>Prior Autonomy:</span>
+                        <span className="font-semibold text-slate-800">
+                          {selectedNode.failure.autonomyBefore}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span>Current Autonomy:</span>
+                        <span className="font-semibold text-amber-800">
+                          {selectedNode.failure.autonomyAfter}
+                        </span>
+                      </div>
+                      <div className="pt-1 border-t border-slate-200 text-[9.5px] text-slate-700 leading-tight">
+                        <span className="font-semibold">Reason: </span>
+                        {selectedNode.failure.detail}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Blast Radius / Downstream Nodes */}
+                {selectedNode.failure?.blastRadius && selectedNode.failure.blastRadius.length > 0 && (
+                  <div className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/50 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-amber-900">
+                      <AlertTriangle className="w-3 h-3 text-amber-600" />
+                      <span>Downstream Blast Radius:</span>
+                    </div>
+                    <p className="text-[10px] text-amber-800">
+                      Unverified signals propagating to {selectedNode.failure.blastRadius.length} downstream node(s):
+                    </p>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {selectedNode.failure.blastRadius.map((downstreamId) => (
+                        <button
+                          key={downstreamId}
+                          type="button"
+                          onClick={() => setSelectedNodeId(downstreamId)}
+                          className="px-2 py-0.5 rounded-md bg-white border border-amber-300 text-amber-900 text-[9.5px] font-bold hover:bg-amber-100 transition-all flex items-center gap-1"
+                        >
+                          <span>{downstreamId}</span>
+                          <span className="text-[8px] text-amber-600">↗</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Health Actions Grid */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10.5px] font-bold text-slate-800 block">Health Mitigation Actions</span>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => regroundNode(selectedNode.id)}
+                      className="h-8 text-xs font-mono font-bold bg-blue-50 text-blue-800 hover:bg-blue-100 border-blue-200 gap-1 rounded-xl shadow-2xs"
+                    >
+                      <RotateCw className="w-3 h-3 text-blue-600" />
+                      <span>Re-ground now</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => restoreAutonomy(selectedNode.id)}
+                      disabled={selectedNode.health !== 'HEALTHY'}
+                      className="h-8 text-xs font-mono font-bold bg-white text-slate-800 hover:bg-slate-50 border-border gap-1 rounded-xl shadow-2xs disabled:opacity-40"
+                    >
+                      <CheckCircle className="w-3 h-3 text-emerald-600" />
+                      <span>Restore Autonomy</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => pauseNode(selectedNode.id)}
+                      className="h-8 text-xs font-mono font-bold bg-purple-50 text-purple-900 hover:bg-purple-100 border-purple-200 gap-1 rounded-xl shadow-2xs"
+                    >
+                      <Sliders className="w-3 h-3 text-purple-600" />
+                      <span>Pause Node</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handToHuman(selectedNode.id)}
+                      className="h-8 text-xs font-mono font-bold bg-amber-50 text-amber-900 hover:bg-amber-100 border-amber-200 gap-1 rounded-xl shadow-2xs"
+                    >
+                      <AlertTriangle className="w-3 h-3 text-amber-600" />
+                      <span>Hand to Human</span>
+                    </Button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB CONTENT: ESCALATIONS / DECISIONS */}
+            {rightTab === 'escalations' && (
+              <div className="flex-1 min-h-0 overflow-y-auto font-mono text-xs space-y-3 pr-0.5">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div className="flex items-center gap-1.5 font-bold text-foreground">
+                    <ShieldAlert className="w-4 h-4 text-amber-600" />
+                    <span>Awaiting Decision ({pendingEscalations.length})</span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-900 border-amber-300">
+                    Human Oversight Gate
+                  </Badge>
+                </div>
+
+                {pendingEscalations.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 text-center space-y-2 my-2">
+                    <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto border border-emerald-300">
+                      <Check className="w-3.5 h-3.5" />
+                    </div>
+                    <p className="font-bold text-xs text-emerald-950">No Pending Escalations</p>
+                    <p className="text-[10px] font-sans text-emerald-800">
+                      All agents are running within safe autonomy thresholds.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingEscalations.map((item) => (
+                      <EscalationCard
+                        key={item.id}
+                        escalation={item}
+                        onActionCommit={handleEscalationAction}
+                        onNavigateToNode={(nodeId: string) => {
+                          setSelectedNodeId(nodeId);
+                          setRightTab('health');
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-border flex items-center justify-between">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewMode('governance')}
+                    className="w-full h-7 text-xs font-mono text-blue-700 bg-blue-50/50 hover:bg-blue-100 border-blue-200 rounded-lg gap-1"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                    <span>Open Full Governance Console</span>
+                  </Button>
                 </div>
               </div>
             )}
@@ -2286,6 +3178,35 @@ class VolSkewAgent(QuantParentAgent):
               </Button>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* ARBITRATION MODAL FOR CONFLICT ESCALATION */}
+      {arbitrationEscalation && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-xl bg-white rounded-2xl border border-border shadow-2xl p-4 font-mono space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Scale className="w-4 h-4 text-red-600" />
+                <span className="font-bold text-sm text-foreground">Conflict Arbitration: {arbitrationEscalation.conflictData?.position || arbitrationEscalation.nodeName}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setArbitrationEscalation(null)}
+                className="text-muted-foreground hover:text-foreground text-xs p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <EscalationCard
+              escalation={arbitrationEscalation}
+              onActionCommit={(actionName: string, escalationId: string, notes?: string) => {
+                handleEscalationAction(actionName, escalationId, notes);
+                setArbitrationEscalation(null);
+              }}
+            />
+          </div>
         </div>
       )}
 

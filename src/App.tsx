@@ -11,8 +11,9 @@ import { AllocationOptimizerView } from './components/AllocationOptimizerView';
 import { TradeBlotterModal } from './components/TradeBlotterModal';
 import { AgentCommandModal } from './components/AgentCommandModal';
 import { WorkspaceViews } from './components/WorkspaceViews';
+import { FailureProvider, useFailureState } from './context/FailureContext';
 
-export const App: React.FC = () => {
+export const AppContent: React.FC = () => {
   const [funds, setFunds] = useState<Fund[]>(MOCK_FUNDS);
   const [selectedFundId, setSelectedFundId] = useState<string>('des-oculus');
   const [activeTab, setActiveTab] = useState<ViewTab>(() => {
@@ -254,6 +255,7 @@ class SynthesizedModel(QuantParentAgent):
               onNavigateToOptimizer={() => setActiveTab('optimizer')}
               onNavigateToScenarios={() => setActiveTab('scenarios')}
               onNavigateToHoldings={() => setActiveTab('holdings')}
+              onNavigateToAgentWorkspace={() => setActiveTab('agent-builder')}
               currency={currency}
               searchQuery={searchQuery}
               onSelectHolding={() => setActiveTab('holdings')}
@@ -324,6 +326,14 @@ class SynthesizedModel(QuantParentAgent):
         }}
       />
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <FailureProvider>
+      <AppContent />
+    </FailureProvider>
   );
 };
 

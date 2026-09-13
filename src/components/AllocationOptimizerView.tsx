@@ -47,6 +47,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { StrategyIdea } from './AIOptimizerWindow';
 import { ResizableSplit } from './ui/ResizableSplit';
+import { useFailureState } from '../context/FailureContext';
 
 interface AllocationOptimizerViewProps {
   funds: Fund[];
@@ -959,6 +960,38 @@ export const AllocationOptimizerView: React.FC<AllocationOptimizerViewProps> = (
                       placeholder="5.0% Single Asset NAV"
                       className="h-9 text-xs font-mono bg-white border-slate-200 rounded-lg text-slate-900"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Failure & Autonomy Step-Down Policy */}
+              <div className="space-y-3 bg-amber-50/50 p-3.5 rounded-xl border border-amber-200/80 shadow-2xs font-mono">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Failure &amp; Degradation Policy</span>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] bg-white border-amber-300 text-amber-900">
+                    Auto-governance
+                  </Badge>
+                </div>
+
+                <div className="space-y-2 text-[11px] text-slate-700">
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Confidence Floor for Full Autonomy:</span>
+                    <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-amber-200">&gt; 75.0%</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Data Feed Stale SLA:</span>
+                    <span className="font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-amber-200">15 min max delay</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>On Grounding Verification Failure:</span>
+                    <span className="font-bold text-amber-800 bg-white px-2 py-0.5 rounded border border-amber-200">Quarantine Node &amp; Require PM Dual Sign-off</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>On Cross-Agent Strategy Conflict:</span>
+                    <span className="font-bold text-purple-800 bg-white px-2 py-0.5 rounded border border-amber-200">Halt routing &amp; escalate to Arbitration Blotter</span>
                   </div>
                 </div>
               </div>
